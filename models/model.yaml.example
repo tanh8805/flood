@@ -1,0 +1,13 @@
+# Đổi tên thành model.yaml để dùng. Mọi khoá đều tuỳ chọn; mặc định đã đúng cho best.pt + seg.pt.
+# Hai vai trò: QUYẾT ĐỊNH ngập (models/best.pt, TorchScript) và TÔ vùng nước (models/seg.pt, không ảnh hưởng %).
+# path: best.pt            # model quyết định
+# seg_path: seg.pt         # model segment chỉ để tô vùng nước
+# device: auto             # best.pt chạy ở: auto (cuda nếu có) | cpu | cuda
+# water_classes: water|flood|nuoc     # segment: regex tên class nước
+# water_conf: 0.4          # segment: ngưỡng tin cậy của mảng nước
+# draw_width: 960          # segment: thu khung rộng hơn về chiều rộng này trước khi suy luận (0 = không thu)
+# flood_on: 0.9            # bật NGẬP khi p trung bình >= giá trị này
+# flood_off: 0.6           # tắt khi p trung bình < giá trị này
+# window_s: 1              # cửa sổ trung bình p (giây)
+# segment_s: 2             # độ dài đoạn (giây)
+# infer_fps: 5             # số khung phân tích mỗi giây

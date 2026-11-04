@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Cảnh báo ngập{% endblock %}</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/app.css">
+{% block head %}{% endblock %}
+</head>
+<body>
+{% if user %}
+<header class="top">
+  <b>Cảnh báo ngập</b>
+  <nav>
+    <a href="/areas">Khu vực</a>
+    {% if user.role in ('uploader','admin') %}<a href="/upload">Gửi video</a>{% endif %}
+    {% if user.role == 'admin' %}<a href="/admin">Quản trị</a>{% endif %}
+  </nav>
+  <span class="muted">{{ user.username }} ({{ user.role }})</span>
+  <form method="post" action="/logout"><button class="sec">Đăng xuất</button></form>
+</header>
+{% endif %}
+<main>{% block body %}{% endblock %}</main>
+<script src="/static/app.js"></script>
+{% block script %}{% endblock %}
+</body>
+</html>

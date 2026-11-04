@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Gửi video{% endblock %}
+{% block body %}
+<h1>Gửi video camera đường phố</h1>
+<div id="model" class="banner" hidden></div>
+<form id="f" class="card">
+  <label for="area">1. Chọn khu vực</label>
+  <select id="area" required></select>
+  <label for="video">2. Video (tối đa {{ max_mb }} MB)</label>
+  <div id="dz" class="dz" tabindex="0" role="button" aria-label="Chọn hoặc kéo thả video"><b>Kéo thả video vào đây</b> hoặc bấm để chọn<div id="fname" class="muted"></div></div>
+  <input id="video" type="file" accept="video/*" hidden>
+  <p><button id="go" disabled>Tải lên và phân tích</button></p>
+  <div id="prog" hidden><div class="bar" role="progressbar" aria-label="Tiến trình"><i id="barfill"></i></div><p class="muted" id="status" aria-live="polite"></p></div>
+  <div id="res" class="banner" hidden></div>
+  <div id="found"></div>
+</form>
+<div class="card"><h2>Lần gửi gần đây</h2><div class="scroll"><table id="jobs"><thead><tr><th>Thời gian</th><th>Khu vực</th><th>File</th><th>Kết quả</th></tr></thead><tbody></tbody></table></div></div>
+{% endblock %}
+{% block script %}
+<script>
+const $ = id => document.getElementById(id);
+const JSTATUS = { queued: 'Đang chờ', running: 'Đang phân tích', done: 'Xong', failed: 'Lỗi' };
+let areas = [], modelOk = false, file = null;
+const ready = () => { $('go').disabled = !(modelOk && file && areas.length); };
+async function init() {
+  const m = await api('/api/model');
+  modelOk = m.loaded;
+  if (!m.loaded) banner($('model'), 'err', m.error);
+  areas = (await api('/api/areas')).areas;
+  $('area').innerHTML = areas.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  if (!areas.length) banner($('model'), 'warn', 'Chưa có khu vực nào: nhờ admin tạo khu vực ở trang Quản trị trước.');
+  ready(); loadJobs();
+}
+async function loadJobs() {
+  const jobs = await api('/api/jobs');
+  $('jobs').tBodies[0].innerHTML = jobs.map(j => `<tr><td>${esc(fmtTime(j.created_at))}</td><td>${esc(j.area)}</td><td>${esc(j.filename)}</td>
+    <td>${JSTATUS[j.status]}${j.status === 'done' ? ' · ' + esc(j.message) : ''}${j.error ? ' · ' + esc(j.error) : ''}</td></tr>`).join('');
+}
+function setFile(f) { file = f; $('fname').textContent = f ? f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB)' : ''; ready(); }
+const dz = $('dz');
+dz.onclick = () => $('video').click();
+dz.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('video').click(); } };
+$('video').onchange = () => setFile($('video').files[0] || null);
+dz.ondragover = e => { e.preventDefault(); dz.classList.add('over'); };
+dz.ondragleave = () => dz.classList.remove('over');
+dz.ondrop = e => { e.preventDefault(); dz.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) setFile(f); };
+
+async function showFound(j) {
+  $('found').innerHTML = '';
+  if (!j.check_id) return;
+  const c = await api('/api/checks/' + j.check_id);
+  const d = document.createElement('div');
+  d.innerHTML = `<h2 class="verdict"></h2><div class="slot"></div><p class="muted"><a href="/checks/${c.id}">Xem lại lần kiểm tra này</a> · xác suất cao nhất ${(c.p_max * 100).toFixed(0)}%${c.p_note ? ' (' + esc(c.p_note) + ')' : ''}</p><div class="evs"></div>`;
+  if (c.flooded) d.querySelector('.verdict').remove();        // ngập: nhãn đỏ phía trên video đã nói rõ
+  else { d.querySelector('.verdict').textContent = 'Không phát hiện ngập'; d.querySelector('.verdict').style.color = 'var(--ok)'; }
+  if (c.video) d.querySelector('.slot').appendChild(videoBox(c.video, c.series));
+  else d.querySelector('.slot').innerHTML = '<p class="muted">Không dựng được video kết quả cho lần này.</p>';
+  $('found').appendChild(d);
+  for (const id of c.incident_ids) {
+    const i = await api('/api/incidents/' + id);
+    const e = document.createElement('div');
+    e.innerHTML = `<h3 style="margin:14px 0 6px;font-size:15px">Sự cố #${i.id}: ${fmtSec(i.video_start_s)} – ${fmtSec(i.video_end_s)} · <a href="/incidents/${i.id}">chi tiết</a></h3>
+      <div class="grid3">${i.evidence.map(x => `<a href="${x.overlay || x.original}" target="_blank" rel="noopener"><img src="${x.crop || x.original}" alt="Ảnh minh chứng ${fmtSec(x.t_s)}"></a>`).join('')}</div>`;
+    d.querySelector('.evs').appendChild(e);
+  }
+}
+function poll(id) {
+  const t = setInterval(async () => {
+    try {
+      const j = await api('/api/jobs/' + id);
+      $('barfill').style.width = (30 + j.progress * 70) + '%';
+      $('status').textContent = JSTATUS[j.status] + ' — ' + j.message;
+      if (j.status === 'done' || j.status === 'failed') {
+        clearInterval(t); ready();
+        if (j.status === 'failed') banner($('res'), 'err', 'Phân tích thất bại: ' + (j.error || 'lỗi không rõ') + '. Thử video khác hoặc chuyển sang mp4 H.264.');
+        if (j.status === 'done') showFound(j);
+        loadJobs();
+      }
+    } catch (e) { clearInterval(t); ready(); banner($('res'), 'err', e.message); }
+  }, 1000);
+}
+$('f').onsubmit = ev => {
+  ev.preventDefault();
+  const fd = new FormData(); fd.append('area_id', $('area').value); fd.append('video', file);
+  $('go').disabled = true; $('res').hidden = true; $('found').innerHTML = ''; $('prog').hidden = false; $('barfill').style.width = '0'; $('status').textContent = 'Đang tải lên…';
+  const x = new XMLHttpRequest();
+  x.open('POST', '/api/jobs');
+  x.upload.onprogress = e => { if (e.lengthComputable) { $('barfill').style.width = (e.loaded / e.total * 30) + '%'; $('status').textContent = 'Đang tải lên… ' + Math.round(e.loaded / e.total * 100) + '%'; } };
+  x.onload = () => {
+    let d = {}; try { d = JSON.parse(x.responseText); } catch (e) {}
+    if (x.status === 202) return poll(d.id);
+    ready(); $('prog').hidden = true;
+    banner($('res'), 'err', typeof d.detail === 'string' ? d.detail : 'Lỗi ' + x.status + ' khi tải lên');
+  };
+  x.onerror = () => { ready(); banner($('res'), 'err', 'Mất kết nối khi tải lên. Kiểm tra mạng rồi thử lại.'); };
+  x.send(fd);
+};
+init().catch(e => banner($('res'), 'err', e.message));
+</script>
+{% endblock %}

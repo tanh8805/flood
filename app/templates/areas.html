@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Khu vực{% endblock %}
+{% block body %}
+<h1>Khu vực</h1>
+<p class="muted">"Đang ngập" = có sự cố trong {{ recent_hours|round|int }} giờ qua. Tự làm mới mỗi 30 giây.</p>
+<div id="msg" class="banner err" hidden></div>
+<label for="q" class="muted">Lọc theo tên khu vực</label>
+<input id="q" type="search" placeholder="Gõ tên khu vực…" autocomplete="off" style="max-width:360px;margin-bottom:14px">
+<ul id="list" class="alist" aria-live="polite"></ul>
+{% endblock %}
+{% block script %}
+<script>
+const $ = id => document.getElementById(id);
+let areas = null;
+const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
+function render() {
+  const q = norm($('q').value.trim());
+  const rows = areas.filter(a => !q || norm(a.name).includes(q));
+  $('list').innerHTML = '';
+  if (!rows.length) { $('list').innerHTML = `<li class="muted">${areas.length ? 'Không có khu vực nào khớp "' + esc($('q').value) + '".' : 'Chưa có khu vực nào. Admin thêm khu vực ở trang Quản trị.'}</li>`; return; }
+  for (const a of rows) {
+    const li = document.createElement('li');
+    li.innerHTML = `<a class="arow ${a.flooded ? 'hot' : ''}" href="/areas/${a.id}">
+      ${a.thumb ? `<img loading="lazy" src="${a.thumb}" alt="Ảnh minh chứng mới nhất">` : '<span class="noimg"></span>'}
+      <div class="info"><b></b><div class="muted"></div><div class="muted"></div><div class="muted"></div></div>
+      <span class="pill ${a.flooded ? 'flood' : 'normal'}">${a.flooded ? 'Đang ngập' : 'Bình thường'}</span></a>`;
+    li.querySelector('b').textContent = a.name;
+    const [d1, d2, d3] = li.querySelectorAll('.info .muted');
+    d1.textContent = 'Lần ngập gần nhất: ' + (a.last_at ? relTime(a.last_at) : 'chưa có');
+    d2.textContent = 'Sự cố trong {{ recent_hours|round|int }} giờ qua: ' + a.recent_count;
+    d3.textContent = 'Kiểm tra lần cuối: ' + (a.last_check_at ? relTime(a.last_check_at) : 'chưa có');
+    $('list').appendChild(li);
+  }
+}
+async function load() {
+  try { areas = (await api('/api/areas')).areas; banner($('msg'), 'err', ''); render(); }
+  catch (e) { banner($('msg'), 'err', 'Không tải được danh sách khu vực: ' + e.message + '. Tải lại trang hoặc kiểm tra kết nối.'); }
+}
+$('q').oninput = () => areas && render();
+load(); setInterval(load, 30000);
+</script>
+{% endblock %}

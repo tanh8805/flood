@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Sự cố ngập #{{ iid }}{% endblock %}
+{% block body %}
+<p><a href="#" id="back">← Khu vực</a></p>
+<div id="msg" class="banner err" hidden></div>
+<div class="card"><h1 id="title">Đang tải…</h1><dl class="kv" id="meta"></dl>
+{% if user.role == 'admin' %}
+  <div class="actions" style="margin-top:12px">
+    <button id="confirm">Xác nhận ngập</button><button id="false" class="sec">Báo nhầm</button><button id="new" class="sec">Đặt lại: mới</button>
+    <button id="del" class="danger">Xoá</button>
+  </div>
+{% endif %}
+</div>
+<div class="card" id="clipBox" hidden><h2>Video kết quả</h2><p class="muted" id="clipNote"></p><div id="clipSlot"></div></div>
+<div class="card"><h2>Ảnh minh chứng</h2><p class="muted">Mỗi hàng là một khung: ảnh gốc, kèm vùng nước và ảnh cắt khi model cho ra mask.</p><div id="ev"></div></div>
+{% endblock %}
+{% block script %}
+<script>
+const iid = {{ iid }}, $ = id => document.getElementById(id);
+function render(i) {
+  $('title').textContent = i.area;
+  $('meta').innerHTML = `
+    <dt>Thời điểm</dt><dd>${esc(fmtTime(i.recorded_at || i.created_at))}${i.recorded_at ? '' : ' <span class="muted">(lúc nhận)</span>'}</dd>
+    <dt>Độ tin cậy</dt><dd>${(i.p_max * 100).toFixed(0)}%${i.p_note ? ' <span class="muted">(' + esc(i.p_note) + ')</span>' : ''}</dd>
+    <dt>Trong video</dt><dd>${i.video_start_s != null ? fmtSec(i.video_start_s) + ' – ' + fmtSec(i.video_end_s) : '—'}</dd>
+    <dt>Model</dt><dd>${esc(i.model_name || '—')}</dd>
+    <dt>Người gửi</dt><dd>${esc(i.uploader || (i.source === 'device' ? 'thiết bị ngoài' : '—'))}</dd>
+    <dt>Trạng thái</dt><dd><span class="pill ${i.status}">${STATUS_VI[i.status]}</span></dd>`;
+  if (i.clip) { $('clipSlot').replaceChildren(videoBox(i.clip, i.series, i.clip_start)); $('clipBox').hidden = false; if (i.check_id) $('clipNote').innerHTML = `Video bắt đầu ở lúc sự cố xảy ra. <a href="/checks/${i.check_id}">Xem cả lần kiểm tra</a>`; }
+  $('ev').innerHTML = i.evidence.map(e => `
+    <div class="trip">${[['original', 'Ảnh gốc'], ['overlay', 'Vùng nước'], ['crop', 'Ảnh cắt']].filter(([k]) => e[k]).map(([k, t]) =>
+      `<figure><a href="${e[k]}" target="_blank" rel="noopener"><img loading="lazy" src="${e[k]}" alt="${t}"></a><figcaption>${t}${k === 'original' && e.t_s != null ? ' · ' + fmtSec(e.t_s) : ''}</figcaption></figure>`).join('')}</div>`).join('');
+}
+const fail = e => banner($('msg'), 'err', e.message);
+api('/api/incidents/' + iid).then(i => { $('back').href = '/areas/' + i.area_id; render(i); }).catch(fail);
+for (const [id, st] of [['confirm', 'confirmed'], ['false', 'false_alarm'], ['new', 'new']]) {
+  const b = $(id); if (b) b.onclick = () => api('/api/incidents/' + iid, jsonOpts('PATCH', { status: st })).then(render).catch(fail);
+}
+if ($('del')) $('del').onclick = async () => {
+  if (!confirm('Xoá sự cố này cùng ảnh minh chứng?')) return;
+  try { await api('/api/incidents/' + iid, { method: 'DELETE' }); location.href = '/areas'; } catch (e) { fail(e); }
+};
+</script>
+{% endblock %}

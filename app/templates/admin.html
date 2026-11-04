@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Quản trị{% endblock %}
+{% block body %}
+<h1>Quản trị</h1>
+<div id="msg" class="banner" hidden></div>
+
+<div class="card"><h2>Model đang dùng</h2>
+  <div id="model" class="muted">Đang tải…</div>
+  <p class="muted" style="margin-bottom:0">Đổi model = chép file vào <code>models/</code>; mỗi model tự nạp lại khi file đổi, không cần khởi động lại.</p>
+</div>
+
+<div class="card"><h2 id="aform-title">Thêm khu vực</h2>
+  <form id="af">
+    <div class="row">
+      <div><label for="a-name">Tên</label><input id="a-name" name="name" required></div>
+    </div>
+    <label for="a-desc">Mô tả</label><input id="a-desc" name="description">
+    <div class="actions"><button id="a-save">Thêm</button><button type="button" class="sec" id="a-cancel" hidden>Huỷ sửa</button></div>
+  </form>
+  <div class="scroll"><table id="areas"><thead><tr><th>Tên</th><th>Mô tả</th><th>Sự cố</th><th>Trạng thái</th><th></th></tr></thead><tbody></tbody></table></div>
+</div>
+
+<div class="card"><h2>Tài khoản</h2>
+  <form id="uf" class="row">
+    <input name="username" placeholder="Tên đăng nhập" required pattern="[A-Za-z0-9_.\-]{3,64}">
+    <input name="password" type="password" placeholder="Mật khẩu (≥ 8 ký tự)" minlength="8" required autocomplete="new-password">
+    <select name="role"><option value="viewer">viewer</option><option value="uploader">uploader</option><option value="admin">admin</option></select>
+    <button>Tạo</button>
+  </form>
+  <div class="scroll"><table id="users"><thead><tr><th>Tên</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr></thead><tbody></tbody></table></div>
+</div>
+{% endblock %}
+{% block script %}
+<script>
+const $ = id => document.getElementById(id);
+const say = (kind, t) => banner($('msg'), kind, t);
+const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { say('err', e.message); } };
+
+const loadModel = guard(async () => {
+  const m = await api('/api/admin/model'), d = m.decide, w = m.draw, c = m.config || {};
+  $('model').innerHTML = `<dl class="kv">
+    <dt>Quyết định ngập (tính %)</dt><dd>${d.loaded ? '<span class="pill ok">Đang chạy</span> ' + esc(d.name) : '<span class="pill flood">Chưa có</span> ' + esc(d.error || '')}</dd>
+    <dt>Tô vùng nước (chỉ để hiển thị, khi đang ngập)</dt><dd>${w.loaded ? '<span class="pill ok">Đang chạy</span> ' + esc(w.name) + ' — class: ' + esc((w.classes || []).join(', ')) : (w.error ? '<span class="pill flood">Lỗi</span> ' + esc(w.error) : '<span class="pill normal">Chưa có seg.pt</span> <span class="muted">video giữ khung gốc, không vẽ vùng nước</span>')}</dd>
+    ${c.flood_on != null ? `<dt>Luật</dt><dd>bật khi p ≥ ${c.flood_on}, tắt khi p &lt; ${c.flood_off}; cửa sổ ${c.window_s} s, đoạn ${c.segment_s} s, ${c.infer_fps} khung/giây</dd>` : ''}</dl>`;
+});
+let editId = null;
+function resetForm() { editId = null; $('af').reset(); $('aform-title').textContent = 'Thêm khu vực'; $('a-save').textContent = 'Thêm'; $('a-cancel').hidden = true; }
+$('a-cancel').onclick = resetForm;
+const loadAreas = guard(async () => {
+  const rows = await api('/api/admin/areas');
+  $('areas').tBodies[0].innerHTML = '';
+  for (const a of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td></td><td></td><td>${a.incidents}</td><td>${a.active ? 'Bật' : 'Tắt'}</td><td class="actions"></td>`;
+    tr.cells[0].textContent = a.name; tr.cells[1].textContent = a.description;
+    const mk = (text, cls, fn) => Object.assign(document.createElement('button'), { type: 'button', className: cls, textContent: text, onclick: guard(fn) });
+    tr.cells[4].append(
+      mk('Sửa', 'sec', async () => {
+        editId = a.id; $('a-name').value = a.name; $('a-desc').value = a.description;
+        $('aform-title').textContent = 'Sửa khu vực: ' + a.name; $('a-save').textContent = 'Lưu'; $('a-cancel').hidden = false;
+        $('a-name').focus();
+      }),
+      mk(a.active ? 'Tắt' : 'Bật', 'sec', async () => { await api('/api/admin/areas/' + a.id, jsonOpts('PUT', { ...a, active: !a.active })); loadAreas(); }),
+      mk('Xoá', 'danger', async () => { if (confirm('Xoá khu vực ' + a.name + '?')) { await api('/api/admin/areas/' + a.id, { method: 'DELETE' }); loadAreas(); } }));
+    $('areas').tBodies[0].appendChild(tr);
+  }
+});
+$('af').onsubmit = guard(async ev => {
+  ev.preventDefault();
+  const f = Object.fromEntries(new FormData(ev.target)); 
+  if (editId) { const cur = (await api('/api/admin/areas')).find(x => x.id === editId); f.active = cur ? cur.active : true; await api('/api/admin/areas/' + editId, jsonOpts('PUT', f)); say('ok', 'Đã lưu khu vực'); }
+  else { await api('/api/admin/areas', jsonOpts('POST', f)); say('ok', 'Đã thêm khu vực'); }
+  resetForm(); loadAreas();
+});
+
+const loadUsers = guard(async () => {
+  const rows = await api('/api/admin/users');
+  $('users').tBodies[0].innerHTML = '';
+  for (const u of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td></td><td></td><td>${u.active ? 'Hoạt động' : 'Khoá'}</td><td></td>`;
+    tr.cells[0].textContent = u.username;
+    const sel = document.createElement('select'); sel.style.width = 'auto';
+    for (const r of ['viewer', 'uploader', 'admin']) sel.add(new Option(r, r, false, r === u.role));
+    sel.onchange = guard(async () => { await api('/api/admin/users/' + u.id, jsonOpts('PATCH', { role: sel.value })); say('ok', 'Đã đổi vai trò'); });
+    tr.cells[1].appendChild(sel);
+    const lock = Object.assign(document.createElement('button'), { className: 'sec', textContent: u.active ? 'Khoá' : 'Mở khoá' });
+    lock.onclick = guard(async () => { await api('/api/admin/users/' + u.id, jsonOpts('PATCH', { active: !u.active })); loadUsers(); });
+    const pw = Object.assign(document.createElement('button'), { className: 'sec', textContent: 'Đặt lại mật khẩu' });
+    pw.onclick = guard(async () => { const p = prompt('Mật khẩu mới (≥ 8 ký tự):'); if (p) { await api('/api/admin/users/' + u.id, jsonOpts('PATCH', { password: p })); say('ok', 'Đã đổi mật khẩu'); } });
+    tr.cells[3].append(lock, ' ', pw);
+    $('users').tBodies[0].appendChild(tr);
+  }
+});
+$('uf').onsubmit = guard(async ev => {
+  ev.preventDefault();
+  await api('/api/admin/users', jsonOpts('POST', Object.fromEntries(new FormData(ev.target)))); ev.target.reset(); say('ok', 'Đã tạo tài khoản'); loadUsers();
+});
+loadModel(); loadAreas(); loadUsers();
+</script>
+{% endblock %}

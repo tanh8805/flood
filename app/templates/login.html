@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập{% endblock %}
+{% block body %}
+<form class="card login" method="post" action="/login">
+  <h1>Đăng nhập</h1>
+  {% if error %}<div class="banner err">{{ error }}</div>{% endif %}
+  <label for="u">Tên đăng nhập</label><input id="u" name="username" autocomplete="username" required autofocus>
+  <label for="p">Mật khẩu</label><input id="p" name="password" type="password" autocomplete="current-password" required>
+  <p><button>Đăng nhập</button></p>
+</form>
+{% endblock %}

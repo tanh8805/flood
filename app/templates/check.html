@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Lần kiểm tra #{{ cid }}{% endblock %}
+{% block body %}
+<p><a href="#" id="back">← Khu vực</a></p>
+<div id="msg" class="banner err" hidden></div>
+<div class="card">
+  <h1 id="title">Đang tải…</h1>
+  <h2 id="verdict"></h2>
+  <dl class="kv" id="meta"></dl>
+  <div id="incs" style="margin-top:8px"></div>
+</div>
+<div class="card"><h2>Video kết quả</h2><div id="slot"></div></div>
+{% endblock %}
+{% block script %}
+<script>
+const $ = id => document.getElementById(id);
+api('/api/checks/{{ cid }}').then(c => {
+  $('back').href = '/areas/' + c.area_id;
+  $('title').textContent = c.area;
+  $('verdict').innerHTML = c.flooded ? `<span class="pill flood">Phát hiện ngập</span>` : '<span class="pill ok">Không phát hiện ngập</span>';
+  $('meta').innerHTML = `
+    <dt>Thời điểm</dt><dd>${esc(fmtTime(c.created_at))} <span class="muted">(${esc(relTime(c.created_at))})</span></dd>
+    <dt>Xác suất cao nhất</dt><dd>${(c.p_max * 100).toFixed(0)}%${c.p_note ? ' <span class="muted">(' + esc(c.p_note) + ')</span>' : ''}</dd>
+    <dt>Độ dài video</dt><dd>${fmtSec(c.duration_s)}</dd>
+    <dt>Người gửi</dt><dd>${esc(c.uploader || '—')}</dd><dt>Model</dt><dd>${esc(c.model_name || '—')}</dd>`;
+  $('incs').innerHTML = c.incident_ids.map(id => `<a class="btn sec" style="margin-right:8px" href="/incidents/${id}">Sự cố #${id}</a>`).join('');
+  if (c.video) $('slot').appendChild(videoBox(c.video, c.series));
+  else $('slot').innerHTML = '<p class="muted">Video kết quả không còn (đã quá thời gian lưu hoặc dựng lỗi). Bản ghi và ảnh minh chứng vẫn được giữ.</p>';
+}).catch(e => banner($('msg'), 'err', e.message));
+</script>
+{% endblock %}

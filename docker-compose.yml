@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DEVICE_API_KEY: ${DEVICE_API_KEY:-}        # đặt để thiết bị ngoài gửi POST /api/incidents bằng X-API-Key
+      KEEP_VIDEO: ${KEEP_VIDEO:-0}
+      # DATABASE_URL: postgresql+psycopg://user:pass@db/flood    # mặc định SQLite trong storage/
+    volumes:
+      - ./models:/app/models
+      - flood-storage:/app/storage
+    restart: unless-stopped
+volumes:
+  flood-storage:
