@@ -41,7 +41,7 @@ const loadModel = guard(async () => {
   $('model').innerHTML = `<dl class="kv">
     <dt>Quyết định ngập (tính %)</dt><dd>${d.loaded ? '<span class="pill ok">Đang chạy</span> ' + esc(d.name) : '<span class="pill flood">Chưa có</span> ' + esc(d.error || '')}</dd>
     <dt>Tô vùng nước (chỉ để hiển thị, khi đang ngập)</dt><dd>${w.loaded ? '<span class="pill ok">Đang chạy</span> ' + esc(w.name) + ' — class: ' + esc((w.classes || []).join(', ')) : (w.error ? '<span class="pill flood">Lỗi</span> ' + esc(w.error) : '<span class="pill normal">Chưa có seg.pt</span> <span class="muted">video giữ khung gốc, không vẽ vùng nước</span>')}</dd>
-    ${c.flood_on != null ? `<dt>Luật</dt><dd>bật khi p ≥ ${c.flood_on}, tắt khi p &lt; ${c.flood_off}; cửa sổ ${c.window_s} s, đoạn ${c.segment_s} s, ${c.infer_fps} khung/giây</dd>` : ''}</dl>`;
+    ${c.flood_on != null ? `<dt>Luật</dt><dd>bật khi p ≥ ${c.flood_on}, tắt khi p &lt; ${c.flood_off}; cửa sổ ${c.window_s} s, giữ tối thiểu ${c.min_hold_s ?? 0} s, đoạn ${c.segment_s} s, ${c.infer_fps} khung/giây${c.crop_black_border ? ', cắt viền đen' : ''}</dd>` : ''}</dl>`;
 });
 let editId = null;
 function resetForm() { editId = null; $('af').reset(); $('aform-title').textContent = 'Thêm khu vực'; $('a-save').textContent = 'Thêm'; $('a-cancel').hidden = true; }

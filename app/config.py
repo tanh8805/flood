@@ -30,6 +30,8 @@ class ModelConfig:
     flood_on: float = 0.9               # bật NGẬP khi p trung bình >= giá trị này
     flood_off: float = 0.6              # tắt khi p trung bình < giá trị này
     window_s: float = 1.0               # cửa sổ trung bình p (giây)
+    min_hold_s: float = 10.0            # sau khi bật NGẬP, giữ tối thiểu từng ấy giây rồi mới áp luật tắt (chống chớp tắt); 0 = không giữ
+    crop_black_border: bool = True      # cắt viền đen (letterbox/pillarbox) của video trước khi đưa vào best.pt và seg.pt
     segment_s: float = 2.0
     infer_fps: float = 5.0
 
@@ -44,6 +46,20 @@ def _yaml(models_dir: Path) -> dict:
     return {str(k).lower(): v for k, v in data.items()}
 
 
+def _cast(current, v):
+    """Ép giá trị YAML/biến môi trường về kiểu của khoá; bool đọc đúng chuỗi '0'/'false' (bool('0') của Python là True)."""
+    if isinstance(current, bool):
+        if isinstance(v, str):
+            t = v.strip().lower()
+            if t in ("1", "true", "yes", "on"):
+                return True
+            if t in ("0", "false", "no", "off"):
+                return False
+            raise ValueError(f"giá trị đúng/sai không hợp lệ: '{v}' (1/0, true/false)")
+        return bool(v)
+    return type(current)(v)
+
+
 def load_model_config(models_dir: Path | None = None) -> ModelConfig:
     models_dir = Path(models_dir or MODELS_DIR)
     cfg = ModelConfig()
@@ -51,13 +67,15 @@ def load_model_config(models_dir: Path | None = None) -> ModelConfig:
     for k, v in _yaml(models_dir).items():
         if k not in known:
             raise ValueError(f"model.yaml: khoá không hợp lệ '{k}' (hợp lệ: {', '.join(known)})")
-        setattr(cfg, k, type(getattr(cfg, k))(v))
+        setattr(cfg, k, _cast(getattr(cfg, k), v))
     for name in known:                       # biến môi trường: MODEL_PATH, MODEL_SEG_PATH, MODEL_DEVICE, FLOOD_ON, WINDOW_S...
         v = os.getenv(f"MODEL_{name.upper()}" if name in ("path", "seg_path", "device") else name.upper())
         if v not in (None, ""):
-            setattr(cfg, name, type(getattr(cfg, name))(v))
+            setattr(cfg, name, _cast(getattr(cfg, name), v))
     if cfg.device not in ("auto", "cpu", "cuda"):
         raise ValueError(f"device không hợp lệ: '{cfg.device}' (auto | cpu | cuda)")
     if not 0 <= cfg.flood_off <= cfg.flood_on <= 1:
         raise ValueError("cần 0 <= flood_off <= flood_on <= 1")
+    if cfg.min_hold_s < 0:
+        raise ValueError("min_hold_s phải >= 0")
     return cfg

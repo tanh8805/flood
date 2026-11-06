@@ -7,6 +7,7 @@ import cv2
 import imageio_ffmpeg
 import numpy as np
 
+from .crop import crop_to_box, detect_black_border
 from .rules import Hysteresis, MaskSmoother, merge_spans, pick_evidence_times, segment_flags
 from .video import Video
 
@@ -105,7 +106,9 @@ def analyze_video(path, model, cfg, progress=None, video_out=None):
     không vẽ chữ. progress(frac 0..1, thông báo)."""
     progress = progress or (lambda f, m: None)
     with Video(path) as vid:
-        hyst = Hysteresis(cfg.window_s, cfg.infer_fps, cfg.flood_on, cfg.flood_off)
+        hyst = Hysteresis(cfg.window_s, cfg.infer_fps, cfg.flood_on, cfg.flood_off, getattr(cfg, "min_hold_s", 0.0))
+        # viền đen (letterbox/pillarbox): cắt trước cả best.pt và seg.pt; hộp tính một lần cho cả video; info["crop"] = hộp (x0, y0, x1, y1) hoặc None
+        box = detect_black_border(vid.path) if getattr(cfg, "crop_black_border", False) else None
         period = 1.0 / cfg.infer_fps
         samples, states, smooth, next_t, idx = [], [], [], 0.0, -1
         writer, mask_small, mask_t, size = None, None, 0.0, None
@@ -115,6 +118,7 @@ def analyze_video(path, model, cfg, progress=None, video_out=None):
                 ok, frame = vid.cap.read()
                 if not ok:
                     break
+                frame = crop_to_box(frame, box)
                 idx += 1
                 t = idx / vid.fps
                 if video_out is not None and writer is None:
@@ -159,7 +163,7 @@ def analyze_video(path, model, cfg, progress=None, video_out=None):
         # [t, p thô, ngập 0/1, p làm mượt]: trang web hiển thị p làm mượt để % và nhãn luôn nhất quán
         series = [[round(t, 2), round(p, 3), int(st), round(sm, 3)] for (t, p), st, sm in zip(samples, states, smooth)]
         info = {"duration": round(duration, 2), "p_max": max(smooth), "p_raw_max": max(p for _, p in samples), "series": series, "video": video_ok,
-                "segments": len(flags), "flooded_segments": sum(flags.values()), "samples": len(samples)}
+                "segments": len(flags), "flooded_segments": sum(flags.values()), "samples": len(samples), "crop": box}
 
         progress(0.92, "Cắt ảnh minh chứng")
         results = []
@@ -168,7 +172,7 @@ def analyze_video(path, model, cfg, progress=None, video_out=None):
             smooth_in = [sm for (t, _), sm in zip(samples, smooth) if sp.t_start <= t < sp.t_end]
             res = IncidentResult(sp.t_start, sp.t_end, max(smooth_in))       # độ tin cậy = p làm mượt lớn nhất trong đoạn
             for t, p in pick_evidence_times(inside, sp.t_start, sp.t_end):
-                frame = vid.frame_at(t)
+                frame = crop_to_box(vid.frame_at(t), box)
                 if frame is not None:
                     res.evidence.append(make_evidence(frame, t, p, model.predict(frame)["mask"]))
             results.append(res)

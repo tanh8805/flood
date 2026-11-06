@@ -9,5 +9,7 @@
 # flood_on: 0.9            # bật NGẬP khi p trung bình >= giá trị này
 # flood_off: 0.6           # tắt khi p trung bình < giá trị này
 # window_s: 1              # cửa sổ trung bình p (giây)
+# min_hold_s: 10           # sau khi bật NGẬP, giữ tối thiểu từng ấy giây rồi mới áp luật tắt (0 = không giữ)
+# crop_black_border: true  # cắt viền đen letterbox/pillarbox trước best.pt và seg.pt
 # segment_s: 2             # độ dài đoạn (giây)
 # infer_fps: 5             # số khung phân tích mỗi giây

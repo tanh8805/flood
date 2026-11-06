@@ -90,7 +90,7 @@ def make_video(path, bright=((4, 10),), secs=14, fps=10, size=(160, 120)):
 def test_analyze_video_one_incident(tmp_path):
     v = tmp_path / "a.mp4"
     make_video(v)
-    res, info = analyze_video(v, BrightModel(), config.ModelConfig())
+    res, info = analyze_video(v, BrightModel(), config.ModelConfig(min_hold_s=0.0))
     assert len(res) == 1
     r = res[0]
     assert 4 <= r.t_start <= 6 and 8 <= r.t_end <= 12
@@ -103,14 +103,14 @@ def test_analyze_video_one_incident(tmp_path):
 def test_analyze_video_dry(tmp_path):
     v = tmp_path / "d.mp4"
     make_video(v, bright=())
-    res, info = analyze_video(v, BrightModel(), config.ModelConfig())
+    res, info = analyze_video(v, BrightModel(), config.ModelConfig(min_hold_s=0.0))
     assert res == [] and info["flooded_segments"] == 0
 
 
 def test_two_incidents(tmp_path):
     v = tmp_path / "b.mp4"
     make_video(v, bright=((2, 6), (10, 16)), secs=18)
-    res, _ = analyze_video(v, BrightModel(), config.ModelConfig())
+    res, _ = analyze_video(v, BrightModel(), config.ModelConfig(min_hold_s=0.0))
     assert len(res) == 2
 
 
@@ -140,7 +140,7 @@ class NoMaskModel(BrightModel):
 def test_result_video_covers_whole_video_and_draws_water_mask_but_no_text(tmp_path):
     v, out = tmp_path / "a.mp4", tmp_path / "result.mp4"
     make_video(v)                                                # 14 s, ngập ở 4-10 s
-    res, info = analyze_video(v, BrightModel(), config.ModelConfig(), video_out=out)
+    res, info = analyze_video(v, BrightModel(), config.ModelConfig(min_hold_s=0.0), video_out=out)
     assert info["video"] and out.exists()
     frames = _frames(out)
     assert len(frames) >= 130 and frames[0].shape[1] <= 854      # toàn bộ video, không chỉ đoạn ngập
@@ -156,14 +156,14 @@ def test_result_video_covers_whole_video_and_draws_water_mask_but_no_text(tmp_pa
 def test_result_video_unchanged_for_model_without_mask(tmp_path):
     v, out = tmp_path / "a.mp4", tmp_path / "result.mp4"
     make_video(v)
-    analyze_video(v, NoMaskModel(), config.ModelConfig(), video_out=out)
+    analyze_video(v, NoMaskModel(), config.ModelConfig(min_hold_s=0.0), video_out=out)
     assert _frames(out)[70].astype(int).std() < 8
 
 
 def test_no_flood_still_gives_video_and_series(tmp_path):
     v, out = tmp_path / "d.mp4", tmp_path / "result.mp4"
     make_video(v, bright=())
-    res, info = analyze_video(v, BrightModel(), config.ModelConfig(), video_out=out)
+    res, info = analyze_video(v, BrightModel(), config.ModelConfig(min_hold_s=0.0), video_out=out)
     assert res == [] and info["video"] and out.exists() and len(_frames(out)) >= 130
     assert info["p_max"] < 0.2 and all(row[2] == 0 for row in info["series"])
 
@@ -171,7 +171,7 @@ def test_no_flood_still_gives_video_and_series(tmp_path):
 def test_series_covers_every_inference_with_raw_and_smoothed(tmp_path):
     v = tmp_path / "a.mp4"
     make_video(v)
-    cfg = config.ModelConfig()
+    cfg = config.ModelConfig(min_hold_s=0.0)
     _, info = analyze_video(v, BrightModel(), cfg)
     s = info["series"]
     assert all(len(row) == 4 for row in s)                                   # [t, p thô, ngập, p làm mượt]
@@ -191,7 +191,7 @@ def test_smoothed_value_is_what_the_on_off_rule_sees(tmp_path):
     """Nhãn luôn nhất quán với số hiển thị: p làm mượt >= bật -> Ngập; < tắt -> Không ngập; giữa hai ngưỡng -> giữ nguyên trạng thái trước."""
     v = tmp_path / "a.mp4"
     make_video(v)
-    cfg = config.ModelConfig()
+    cfg = config.ModelConfig(min_hold_s=0.0)
     _, info = analyze_video(v, BrightModel(), cfg)
     prev = 0
     for t, raw, on, smooth in info["series"]:
@@ -211,14 +211,14 @@ def test_partial_file_removed_when_model_fails(tmp_path):
     v, out = tmp_path / "a.mp4", tmp_path / "result.mp4"
     make_video(v, secs=3)
     with pytest.raises(RuntimeError):
-        analyze_video(v, Boom(), config.ModelConfig(), video_out=out)
+        analyze_video(v, Boom(), config.ModelConfig(min_hold_s=0.0), video_out=out)
     assert not out.exists()
 
 
 def test_mask_shared_between_inferences_but_never_older_than_half_a_second(tmp_path):
     v, out = tmp_path / "a.mp4", tmp_path / "result.mp4"
     make_video(v)                                              # 10 fps, ngập (mask nửa dưới) từ 4 s
-    analyze_video(v, BrightModel(), config.ModelConfig(infer_fps=1.0), video_out=out)   # suy luận mỗi 1 s: giữa hai lần có khoảng trống 1 s
+    analyze_video(v, BrightModel(), config.ModelConfig(infer_fps=1.0, min_hold_s=0.0), video_out=out)   # suy luận mỗi 1 s: giữa hai lần có khoảng trống 1 s
     frames = _frames(out)
 
     def drawn(i):
@@ -242,7 +242,7 @@ def make_levels(path, levels, secs=14, fps=10, size=(160, 120)):
 def test_p_max_is_smoothed_not_raw_spike(tmp_path):
     v = tmp_path / "spike.mp4"
     make_levels(v, [(5.0, 5.2, 255)])                                    # một cú nhảy 0.2 s giữa nền tối
-    res, info = analyze_video(v, BrightModel(), config.ModelConfig())
+    res, info = analyze_video(v, BrightModel(), config.ModelConfig(min_hold_s=0.0))
     raw = [r[1] for r in info["series"]]
     sm = [r[3] for r in info["series"]]
     assert info["p_raw_max"] == pytest.approx(max(raw), abs=1e-3) and max(raw) > 0.85          # p thô có đỉnh cao
@@ -253,7 +253,7 @@ def test_p_max_is_smoothed_not_raw_spike(tmp_path):
 def test_incident_confidence_is_max_smoothed_inside_the_span(tmp_path):
     v = tmp_path / "wet.mp4"
     make_levels(v, [(7.0, 7.4, 255), (4.0, 10.0, 215)])                  # ngập ổn định (p~0.84) + một đoạn chói ngắn
-    res, info = analyze_video(v, BrightModel(), config.ModelConfig(flood_on=0.8, window_s=2.0))
+    res, info = analyze_video(v, BrightModel(), config.ModelConfig(flood_on=0.8, window_s=2.0, min_hold_s=0.0))
     assert len(res) == 1
     r, s = res[0], info["series"]
     inside = [row for row in s if r.t_start <= row[0] < r.t_end]
@@ -306,7 +306,7 @@ def test_water_drawn_only_while_flooded_and_drawer_skipped_otherwise(tmp_path):
     v, out = tmp_path / "a.mp4", tmp_path / "result.mp4"
     make_video(v)                                                # 14 s, sáng (ngập) 4–10 s
     m = GatedModel()
-    analyze_video(v, m, config.ModelConfig(), video_out=out)
+    analyze_video(v, m, config.ModelConfig(min_hold_s=0.0), video_out=out)
     frames = _frames(out)
 
     def drawn(i):
@@ -316,3 +316,42 @@ def test_water_drawn_only_while_flooded_and_drawer_skipped_otherwise(tmp_path):
     assert drawn(70)                                             # 7 s: đang ngập
     assert not any(drawn(i) for i in range(125, len(frames)))    # sau khi hết ngập: không vẽ
     assert m.drawn < 14 * 5 * 0.6                                # không chạy model vẽ trên đoạn không ngập (14 s x 5 mẫu/s)
+
+
+def test_hysteresis_min_hold():
+    # cửa sổ 1 mẫu (0,2 s x 5 fps), bật >= 0.8, tắt < 0.3; giữ tối thiểu 1 s = 5 mẫu
+    h = Hysteresis(0.2, 5, 0.8, 0.3, hold_s=1.0)
+    out = [h.update(p) for p in [0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    assert out == [False, True, True, True, True, True, False, False]
+    assert [Hysteresis(0.2, 5, 0.8, 0.3).update(p) for p in [0.9, 0.0]] == [True, False]   # hold_s = 0 như cũ
+    h = Hysteresis(0.2, 5, 0.8, 0.3, hold_s=1.0)
+    assert [h.update(p) for p in [0.9] * 6 + [0.0, 0.0]] == [True] * 6 + [False, False]    # hết giữ là áp luật tắt ngay
+    h = Hysteresis(0.2, 5, 0.8, 0.3, hold_s=1.0)                                            # peek khớp update, kể cả lúc đang giữ
+    h.update(0.9)
+    assert h.peek(0.0) is True and h.state is True and h.held == 1
+
+
+def test_min_hold_default_is_10s_and_merges_a_short_gap(tmp_path):
+    cfg = config.ModelConfig()
+    assert cfg.min_hold_s == 10.0 and cfg.crop_black_border is True
+    v = tmp_path / "gap.mp4"
+    make_video(v, bright=((2, 6), (9, 13)), secs=26)                 # hai đợt sáng cách nhau 3 s
+    res0, _ = analyze_video(v, BrightModel(), config.ModelConfig(min_hold_s=0.0))
+    res10, info = analyze_video(v, BrightModel(), cfg)
+    assert len(res0) == 2                                            # không giữ: hai sự cố
+    assert len(res10) == 1 and res10[0].t_end - res10[0].t_start >= 10   # giữ 10 s: nối thành một sự cố, ngập ít nhất 10 s
+    assert info["crop"] is None                                      # video không có viền đen
+
+
+def test_config_bool_parsing(monkeypatch):
+    monkeypatch.setenv("CROP_BLACK_BORDER", "0")
+    assert config.load_model_config().crop_black_border is False
+    monkeypatch.setenv("CROP_BLACK_BORDER", "true")
+    assert config.load_model_config().crop_black_border is True
+    monkeypatch.setenv("CROP_BLACK_BORDER", "maybe")
+    with pytest.raises(ValueError):
+        config.load_model_config()
+    monkeypatch.delenv("CROP_BLACK_BORDER")
+    monkeypatch.setenv("MIN_HOLD_S", "-1")
+    with pytest.raises(ValueError):
+        config.load_model_config()

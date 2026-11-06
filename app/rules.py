@@ -8,24 +8,34 @@ MIN_FRAME_FRAC = 0.5      # đoạn NGẬP khi >= 50% lần suy luận trong đo
 
 
 class Hysteresis:
-    """p trung bình trượt n mẫu gần nhất; bật khi >= on, giữ cho tới khi < off."""
+    """p trung bình trượt n mẫu gần nhất; bật khi >= on, giữ cho tới khi < off.
+    hold_s: sau khi bật, giữ NGẬP tối thiểu từng ấy giây (min-hold) rồi mới áp luật tắt; 0 = không giữ."""
 
-    def __init__(self, window_s, infer_fps, on, off):
+    def __init__(self, window_s, infer_fps, on, off, hold_s=0.0):
         self.buf = deque(maxlen=max(1, int(round(window_s * infer_fps))))
         self.on, self.off, self.state, self.avg = on, off, False, 0.0
+        self.hold_n = int(round(hold_s * infer_fps))
+        self.held = 0                      # số mẫu liên tiếp đã ở trạng thái NGẬP (tính cả mẫu vừa bật)
+
+    def _next(self, avg):
+        new = avg >= (self.off if self.state else self.on)
+        if self.state and not new and self.held < self.hold_n:
+            new = True                     # còn trong thời gian giữ tối thiểu
+        return new
 
     def update(self, p):
         """Nhận p thô của một lần suy luận; cập nhật `avg` (p làm mượt, đúng giá trị so với ngưỡng) và trả trạng thái ngập."""
         self.buf.append(p)
         self.avg = sum(self.buf) / len(self.buf)
-        self.state = self.avg >= (self.off if self.state else self.on)
+        new = self._next(self.avg)
+        self.held = self.held + 1 if new else 0
+        self.state = new
         return self.state
 
     def peek(self, p):
         """Trạng thái NGẬP nếu mẫu tiếp theo có p thô này (không đổi trạng thái)."""
         buf = list(self.buf)[-(self.buf.maxlen - 1):] if self.buf.maxlen > 1 else []
-        avg = sum(buf + [p]) / (len(buf) + 1)
-        return avg >= (self.off if self.state else self.on)
+        return self._next(sum(buf + [p]) / (len(buf) + 1))
 
 
 class MaskSmoother:
