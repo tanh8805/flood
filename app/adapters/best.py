@@ -1,5 +1,6 @@
 """Model QUYẾT ĐỊNH ngập: models/best.pt, TorchScript, p = m(frame BGR uint8 HxWx3) với kích thước khung bất kỳ.
-Model tự resize/chuẩn hoá bên trong nên KHÔNG tự đổi kích thước hay đổi RGB ở ngoài. Không cần open_clip."""
+Model tự resize/chuẩn hoá bên trong nên KHÔNG tự đổi kích thước hay đổi RGB ở ngoài. Không cần open_clip.
+L-14 (v1.1) lưu trọng số fp16: GPU chạy fp16, CPU nạp xong đổi về fp32 (`.float()`); bản fp32 thì `.float()` không đổi gì."""
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +30,8 @@ class BestAdapter:
                 import torch
                 self.device = pick_device(device, torch.cuda.is_available())
                 module = torch.jit.load(str(self.path), map_location=self.device).eval()
+                if self.device == "cpu":
+                    module = module.float()      # best.pt L-14 lưu phần visual fp16: GPU chạy fp16, CPU đổi về fp32 (fp16 trên CPU chậm/không ổn định)
             except ModelError:
                 raise
             except Exception as e:

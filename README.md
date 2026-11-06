@@ -24,18 +24,18 @@ Cần Python 3.12 (venv) hoặc Docker. Hai file model nằm ở `models/`:
 | file | trong git? | vai trò |
 |---|---|---|
 | `models/seg.pt` (~20 MB) | có | chỉ tô vùng nước |
-| `models/best.pt` (~335 MB, > 100 MB nên không đẩy lên git) | **không**, đính kèm **Release v1.0** | quyết định ngập |
+| `models/best.pt` (~580 MB, CLIP ViT-L/14, > 100 MB nên không đẩy lên git) | **không**, đính kèm **Release v1.1** (v1.0 là bản B-32 335 MB) | quyết định ngập |
 
 ### 1. Tải `best.pt` về `models/`
 ```
-gh release download v1.0 -R tanh8805/flood -p best.pt -D models/ --clobber
+gh release download v1.1 -R tanh8805/flood -p best.pt -D models/ --clobber
 ```
 Không có `gh` (repo công khai) thì dùng curl:
 ```
-curl -L -o models/best.pt https://github.com/tanh8805/flood/releases/download/v1.0/best.pt
+curl -L -o models/best.pt https://github.com/tanh8805/flood/releases/download/v1.1/best.pt
 ```
-Repo riêng tư mà không có `gh`: `curl -L -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" -o models/best.pt "$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/tanh8805/flood/releases/tags/v1.0 | python -c 'import sys,json;print(json.load(sys.stdin)["assets"][0]["url"])')"`.
-Thiếu `best.pt` thì app vẫn chạy nhưng trang Gửi video báo "Chưa có model".
+Repo riêng tư mà không có `gh`: `curl -L -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" -o models/best.pt "$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/tanh8805/flood/releases/tags/v1.1 | python -c 'import sys,json;print(json.load(sys.stdin)["assets"][0]["url"])')"`.
+`best.pt` lưu trọng số fp16: chạy GPU thì để nguyên (fp16); CPU thì app tự đổi về fp32 (`.float()`), chậm cỡ 1 s/khung hình suy luận (5 khung/s video ⇒ chậm hơn thời gian thực nhiều lần) nên nên dùng GPU. Thiếu `best.pt` thì app vẫn chạy nhưng trang Gửi video báo "Chưa có model".
 
 ### 2a. Chạy bằng venv
 ```

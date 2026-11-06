@@ -385,3 +385,20 @@ def test_shipped_seg_pt_is_a_water_segment_model():
         pytest.skip("không có models/seg.pt")
     a = build_drawer(config.ModelConfig(), seg.parent)
     assert a.task == "segment" and a.classes == ["water"]
+
+
+def test_best_adapter_upcasts_fp16_weights_on_cpu(tmp_path):
+    """best.pt L-14 lưu trọng số fp16; trên CPU adapter phải đổi về fp32 để chạy được."""
+    class _Lin(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.full((3,), 0.5))
+
+        def forward(self, frame):
+            return (frame.float().mean() / 255.0 * self.w.to(torch.float32).sum() / 1.5)
+
+    m = _Lin(); m.half()
+    torch.jit.script(m).save(str(tmp_path / "best.pt"))
+    a = BestAdapter(tmp_path / "best.pt", device="cpu")
+    assert next(a.module.parameters()).dtype == torch.float32
+    assert a.predict(np.full((8, 8, 3), 51, np.uint8))["p_ngap"] == pytest.approx(0.2, abs=1e-3)
