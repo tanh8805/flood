@@ -234,14 +234,14 @@ def test_composite_draws_only_when_gate_allows():
 # ---- cấu hình ----
 def test_defaults_are_the_best_pt_rule(tmp_path):
     c = config.load_model_config(tmp_path)
-    assert (c.window_s, c.infer_fps, c.flood_on, c.flood_off, c.segment_s) == (1.0, 5.0, 0.9, 0.6, 2.0)
+    assert (c.window_s, c.infer_fps, c.flood_on, c.flood_off, c.segment_s) == (2.0, 5.0, 0.9, 0.4, 2.0)
     assert (c.water_conf, c.draw_width, c.path, c.seg_path, c.device) == (0.4, 960, "best.pt", "seg.pt", "auto")
 
 
 def test_config_yaml_and_env(tmp_path, monkeypatch):
     (tmp_path / "model.yaml").write_text("flood_on: 0.85\nwindow_s: 3\ndevice: cpu\n")
     c = config.load_model_config(tmp_path)
-    assert (c.flood_on, c.flood_off, c.window_s, c.device) == (0.85, 0.6, 3.0, "cpu")
+    assert (c.flood_on, c.flood_off, c.window_s, c.device) == (0.85, 0.4, 3.0, "cpu")
     monkeypatch.setenv("FLOOD_OFF", "0.5")
     monkeypatch.setenv("MODEL_DEVICE", "auto")
     c = config.load_model_config(tmp_path)

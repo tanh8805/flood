@@ -28,8 +28,8 @@ class ModelConfig:
     water_conf: float = 0.4             # segment (tô): ngưỡng tin cậy của mảng nước
     draw_width: int = 960               # segment (tô): thu khung rộng hơn giá trị này về đúng chiều rộng này trước khi suy luận; 0 = không thu
     flood_on: float = 0.9               # bật NGẬP khi p trung bình >= giá trị này
-    flood_off: float = 0.6              # tắt khi p trung bình < giá trị này
-    window_s: float = 1.0               # cửa sổ trung bình p (giây)
+    flood_off: float = 0.4              # tắt khi p trung bình < giá trị này
+    window_s: float = 2.0               # cửa sổ trung bình p (giây)
     min_hold_s: float = 10.0            # sau khi bật NGẬP, giữ tối thiểu từng ấy giây rồi mới áp luật tắt (chống chớp tắt); 0 = không giữ
     crop_black_border: bool = True      # cắt viền đen (letterbox/pillarbox) của video trước khi đưa vào best.pt và seg.pt
     segment_s: float = 2.0

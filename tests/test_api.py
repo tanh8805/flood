@@ -343,7 +343,7 @@ def test_legacy_records_get_smoothed_p_recomputed_or_noted(client, users, area, 
     from app.models import Check, Incident
     from app.rules import Hysteresis
     from app.series import P_NOTE, recompute_legacy
-    cfg = config.ModelConfig(flood_on=0.8, window_s=2.0)          # luật cũ của bản ghi giả
+    cfg = config.ModelConfig(flood_on=0.8, flood_off=0.6, window_s=2.0)          # luật cũ của bản ghi giả
     raw = [0.1] * 10 + [0.99, 0.3, 0.98, 0.97, 0.96] + [0.95] * 30 + [0.2] * 10            # có đỉnh/trũng lẻ để thấy khác biệt
     rows = _legacy_rows(raw)
     h = Hysteresis(2, 5, 0.8, 0.6)
