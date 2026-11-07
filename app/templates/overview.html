@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Tổng quan{% endblock %}
+{% block body %}
+<h1>Tổng quan</h1>
+<div id="msg" class="banner err" hidden></div>
+<div class="stats">
+  <div class="stat" id="s-hot"><a href="/areas"><span class="muted">Khu vực đang ngập ({{ recent_hours|round|int }} giờ qua)</span><b id="n-hot">—</b><span class="muted" id="n-areas"></span></a></div>
+  <div class="stat" id="s-new"><a href="/incidents"><span class="muted">Sự cố mới cần xử lý</span><b id="n-new">—</b></a></div>
+  <div class="stat"><span class="muted">Model</span><b id="m-state" style="font-size:20px">—</b><span class="muted" id="m-rule"></span></div>
+</div>
+<div class="card"><h2>Sự cố mới cần xử lý</h2><ul id="new" class="alist" aria-live="polite"></ul></div>
+<div class="card"><h2>Khu vực đang ngập</h2><ul id="hot" class="alist"></ul></div>
+<div class="card"><h2>Lần kiểm tra gần đây</h2>
+  <div class="scroll"><table id="checks"><thead><tr><th>Thời gian</th><th>Người gửi</th><th>Khu vực</th><th>Kết quả</th><th>Xác suất cao nhất</th></tr></thead><tbody></tbody></table></div></div>
+<div class="card"><h2>Trạng thái model</h2><div id="model" class="muted">Đang tải…</div></div>
+{% endblock %}
+{% block script %}
+<script>
+const $ = id => document.getElementById(id);
+function incRow(i) {
+  return `<li class="irow" data-id="${i.id}">
+    ${i.thumb ? `<img loading="lazy" src="${i.thumb}" alt="Ảnh minh chứng">` : '<span class="noimg"></span>'}
+    <div class="info"><a href="/incidents/${i.id}">${esc(i.area)}</a><div class="muted">${esc(fmtTime(i.recorded_at || i.created_at))} · ${esc(relTime(i.recorded_at || i.created_at))} · độ tin cậy ${(i.p_max * 100).toFixed(0)}% · ${esc(i.uploader || (i.source === 'device' ? 'thiết bị ngoài' : '—'))}</div></div>
+    <div class="acts"><button data-st="confirmed">Xác nhận</button><button class="sec" data-st="false_alarm">Báo nhầm</button></div></li>`;
+}
+async function setStatus(id, st) {
+  try { await api('/api/incidents/' + id, jsonOpts('PATCH', { status: st })); await load(); }
+  catch (e) { banner($('msg'), 'err', 'Không đổi được trạng thái: ' + e.message); }
+}
+async function load() {
+  try {
+    const o = await api('/api/admin/overview');
+    $('n-hot').textContent = o.flooded_areas.length; $('n-areas').textContent = 'trên ' + o.areas_total + ' khu vực';
+    $('s-hot').classList.toggle('hot', o.flooded_areas.length > 0);
+    $('n-new').textContent = o.new_incidents_total; $('s-new').classList.toggle('hot', o.new_incidents_total > 0);
+    $('m-state').textContent = o.model.loaded ? 'Sẵn sàng' : 'Chưa có';
+    $('m-rule').textContent = o.model.rule ? `cửa sổ ${o.model.rule.window_s} s · bật ${o.model.rule.flood_on} · tắt ${o.model.rule.flood_off} · giữ ${o.model.rule.min_hold_s} s` : '';
+    $('new').innerHTML = o.new_incidents.length ? o.new_incidents.map(incRow).join('') : '<li class="muted">Không có sự cố mới nào cần xử lý.</li>';
+    $('new').querySelectorAll('.irow').forEach(li => li.querySelectorAll('button').forEach(b => b.onclick = () => setStatus(li.dataset.id, b.dataset.st)));
+    $('hot').innerHTML = o.flooded_areas.length ? o.flooded_areas.map(a => `<li><a class="arow hot" href="/areas/${a.id}"><div class="info"><b>${esc(a.name)}</b><div class="muted">Sự cố gần nhất: ${esc(relTime(a.last_at))} · ${a.recent_count} sự cố trong {{ recent_hours|round|int }} giờ qua</div></div><span class="pill flood">Đang ngập</span></a></li>`).join('') : '<li class="muted">Không khu vực nào đang ngập.</li>';
+    $('checks').tBodies[0].innerHTML = o.recent_checks.length ? o.recent_checks.map(c => `<tr><td><a href="/checks/${c.id}">${esc(fmtTime(c.created_at))}</a></td><td>${esc(c.uploader || '—')}</td><td>${esc(c.area)}</td>
+      <td><span class="pill ${c.flooded ? 'flood' : 'ok'}">${c.flooded ? 'Ngập' : 'Không ngập'}</span></td><td>${(c.p_max * 100).toFixed(0)}%</td></tr>`).join('') : '<tr><td colspan="5" class="muted">Chưa có lần kiểm tra nào.</td></tr>';
+    $('model').innerHTML = `Quyết định: <b>${esc(o.model.decide || 'chưa nạp')}</b>${o.model.error ? ' <span style="color:var(--danger)">(' + esc(o.model.error) + ')</span>' : ''}<br>Tô vùng nước: <b>${esc(o.model.draw || 'không có')}</b>${o.model.draw_error ? ' <span style="color:var(--danger)">(' + esc(o.model.draw_error) + ')</span>' : ''}`;
+    banner($('msg'), 'err', '');
+  } catch (e) { banner($('msg'), 'err', 'Không tải được tổng quan: ' + e.message); }
+}
+load(); setInterval(load, 30000);
+</script>
+{% endblock %}

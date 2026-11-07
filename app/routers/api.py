@@ -88,8 +88,11 @@ def check_out(c: Check, detail=False):
 
 
 @router.get("/checks")
-def list_checks(area_id: int | None = None, limit: int = 30, db: Session = Depends(get_db), _: User = Depends(current_user)):
+def list_checks(area_id: int | None = None, limit: int = 30, db: Session = Depends(get_db), user: User = Depends(require("admin", "uploader"))):
+    """admin: mọi lần kiểm tra; uploader: chỉ của chính mình; viewer: 403."""
     q = select(Check).options(joinedload(Check.area), joinedload(Check.uploader)).order_by(Check.created_at.desc(), Check.id.desc())
+    if user.role != "admin":
+        q = q.where(Check.uploader_id == user.id)
     if area_id:
         q = q.where(Check.area_id == area_id)
     return [check_out(c) for c in db.scalars(q.limit(min(max(limit, 1), 200))).unique()]
@@ -102,14 +105,27 @@ def _check(db, cid):
     return c
 
 
+def _own_check(db, cid, user):
+    """Lần kiểm tra mà user được xem chi tiết: admin xem hết, uploader chỉ của mình, viewer không."""
+    c = _check(db, cid)
+    if user.role != "admin" and not (user.role == "uploader" and c.uploader_id == user.id):
+        raise HTTPException(403, "Không đủ quyền xem lần kiểm tra này")
+    return c
+
+
 @router.get("/checks/{cid}")
-def get_check(cid: int, db: Session = Depends(get_db), _: User = Depends(current_user)):
-    return check_out(_check(db, cid), detail=True)
+def get_check(cid: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return check_out(_own_check(db, cid, user), detail=True)
 
 
 @router.get("/checks/{cid}/video")
-def check_video(cid: int, db: Session = Depends(get_db), _: User = Depends(current_user)):
+def check_video(cid: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     c = _check(db, cid)
+    if user.role == "viewer":        # viewer chỉ xem video của lần kiểm tra có sự cố (trang chi tiết sự cố cần video này)
+        if not any(i.status != "false_alarm" for i in c.incidents):
+            raise HTTPException(403, "Không đủ quyền xem video này")
+    elif user.role != "admin" and c.uploader_id != user.id:
+        raise HTTPException(403, "Không đủ quyền xem video này")
     if not c.video_path:
         raise HTTPException(404, "Video kết quả không còn (đã quá thời gian lưu hoặc dựng lỗi)")
     return _file(c.video_path, "video/mp4")
@@ -220,7 +236,7 @@ def incident_clip(iid: int, db: Session = Depends(get_db), _: User = Depends(cur
 
 # ---- model + job
 @router.get("/model")
-def model_status(request: Request, _: User = Depends(current_user)):
+def model_status(request: Request, _: User = Depends(require("admin", "uploader"))):
     request.app.state.holder.refresh()
     s = request.app.state.holder.status()
     return {"loaded": s["loaded"], "error": s["error"]}
@@ -279,4 +295,4 @@ def my_jobs(db: Session = Depends(get_db), user: User = Depends(require("uploade
     q = select(Job).options(joinedload(Job.area)).order_by(Job.created_at.desc()).limit(20)
     if user.role != "admin":
         q = q.where(Job.user_id == user.id)
-    return [job_out(j) for j in db.scalars(q)]
+    return [job_out(j, db) for j in db.scalars(q)]

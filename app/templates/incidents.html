@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Sự cố{% endblock %}
+{% block body %}
+<h1>Sự cố</h1>
+<div id="msg" class="banner err" hidden></div>
+<label for="f" class="muted">Lọc theo trạng thái</label>
+<select id="f" style="max-width:240px;margin-bottom:14px"><option value="">Tất cả</option><option value="new" selected>Mới (cần xử lý)</option><option value="confirmed">Đã xác nhận</option><option value="false_alarm">Báo nhầm</option></select>
+<ul id="list" class="alist" aria-live="polite"></ul>
+{% endblock %}
+{% block script %}
+<script>
+const $ = id => document.getElementById(id);
+let all = [];
+function row(i) {
+  return `<li class="irow" data-id="${i.id}">
+    ${i.thumb ? `<img loading="lazy" src="${i.thumb}" alt="Ảnh minh chứng">` : '<span class="noimg"></span>'}
+    <div class="info"><a href="/incidents/${i.id}">${esc(i.area)}</a> <span class="pill ${i.status}">${STATUS_VI[i.status]}</span>
+      <div class="muted">${esc(fmtTime(i.recorded_at || i.created_at))} · độ tin cậy ${(i.p_max * 100).toFixed(0)}% · ${esc(i.uploader || (i.source === 'device' ? 'thiết bị ngoài' : '—'))}</div></div>
+    <div class="acts">${i.status !== 'confirmed' ? '<button data-st="confirmed">Xác nhận</button>' : ''}${i.status !== 'false_alarm' ? '<button class="sec" data-st="false_alarm">Báo nhầm</button>' : ''}${i.status !== 'new' ? '<button class="sec" data-st="new">Đặt lại: mới</button>' : ''}</div></li>`;
+}
+function render() {
+  const f = $('f').value, rows = all.filter(i => !f || i.status === f);
+  $('list').innerHTML = rows.length ? rows.map(row).join('') : '<li class="muted">Không có sự cố nào ở trạng thái này.</li>';
+  $('list').querySelectorAll('.irow').forEach(li => li.querySelectorAll('button').forEach(b => b.onclick = async () => {
+    try { await api('/api/incidents/' + li.dataset.id, jsonOpts('PATCH', { status: b.dataset.st })); await load(); }
+    catch (e) { banner($('msg'), 'err', 'Không đổi được trạng thái: ' + e.message); }
+  }));
+}
+async function load() { try { all = await api('/api/incidents?limit=200'); banner($('msg'), 'err', ''); render(); } catch (e) { banner($('msg'), 'err', e.message); } }
+$('f').onchange = render;
+load(); setInterval(load, 30000);
+</script>
+{% endblock %}

@@ -11,11 +11,20 @@
 <body>
 {% if user %}
 <header class="top">
-  <b>Cảnh báo ngập</b>
-  <nav>
-    <a href="/areas">Khu vực</a>
-    {% if user.role in ('uploader','admin') %}<a href="/upload">Gửi video</a>{% endif %}
-    {% if user.role == 'admin' %}<a href="/admin">Quản trị</a>{% endif %}
+  <b><a href="{{ {'admin': '/overview', 'uploader': '/upload', 'viewer': '/areas'}[user.role] }}" style="text-decoration:none;color:inherit">Cảnh báo ngập</a></b>
+  <nav aria-label="Menu chính">
+    {% set path = request.url.path %}
+    {% if user.role == 'admin' %}
+    <a href="/overview" {% if path == '/overview' %}class="on" aria-current="page"{% endif %}>Tổng quan</a>
+    <a href="/incidents" {% if path == '/incidents' %}class="on" aria-current="page"{% endif %}>Sự cố</a>
+    <a href="/admin" {% if path == '/admin' %}class="on" aria-current="page"{% endif %}>Khu vực &amp; tài khoản</a>
+    <a href="/upload" {% if path == '/upload' %}class="on" aria-current="page"{% endif %}>Gửi video</a>
+    {% elif user.role == 'uploader' %}
+    <a href="/upload" {% if path == '/upload' %}class="on" aria-current="page"{% endif %}>Gửi video</a>
+    <a href="/areas" {% if path.startswith('/areas') %}class="on" aria-current="page"{% endif %}>Khu vực</a>
+    {% else %}
+    <a href="/areas" {% if path.startswith('/areas') %}class="on" aria-current="page"{% endif %}>Khu vực</a>
+    {% endif %}
   </nav>
   <span class="muted">{{ user.username }} ({{ user.role }})</span>
   <form method="post" action="/logout"><button class="sec">Đăng xuất</button></form>

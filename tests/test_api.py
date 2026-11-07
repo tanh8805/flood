@@ -36,7 +36,7 @@ def test_roles(admin, users, area):
 
 def test_no_model_blocks_upload_but_app_runs(client, users, area):
     assert client.app.state.holder.model is None
-    r = users["viewer"].get("/api/model").json()
+    r = users["admin"].get("/api/model").json()
     assert not r["loaded"] and "Chưa có model" in r["error"]
     r = users["uploader"].post("/api/jobs", data={"area_id": area["id"]}, files={"video": ("a.mp4", b"x", "video/mp4")})
     assert r.status_code == 503 and "Chưa có model" in r.json()["detail"]
@@ -216,7 +216,7 @@ def test_upload_picks_up_new_decider_without_restart(client, users, area, monkey
     from app import config
     holder = client.app.state.holder
     assert holder.model is None
-    r = users["viewer"].get("/api/model").json()
+    r = users["admin"].get("/api/model").json()
     assert not r["loaded"] and "Chưa có model" in r["error"] and set(r) == {"loaded", "error"}
 
     def fake_build(cfg, d):
@@ -228,7 +228,7 @@ def test_upload_picks_up_new_decider_without_restart(client, users, area, monkey
     (config.MODELS_DIR / "best.pt").write_bytes(b"x")
     os.utime(config.MODELS_DIR / "best.pt", (1_900_000_000, 1_900_000_000))
     try:
-        assert users["viewer"].get("/api/model").json()["loaded"] is True
+        assert users["admin"].get("/api/model").json()["loaded"] is True
         assert holder.model is not None
     finally:
         (config.MODELS_DIR / "best.pt").unlink()
@@ -258,7 +258,7 @@ def _video(path, bright=(), secs=10):
 
 
 def test_check_recorded_for_flooded_and_dry_video(client, users, area, admin, tmp_path):
-    u, viewer = users["uploader"], users["viewer"]
+    u, viewer = users["uploader"], users["admin"]
     dry = admin.post("/api/admin/areas", json={"name": "Khu kiểm tra khô"}).json()
     j = _upload_and_wait(client, u, dry["id"], _video(tmp_path / "dry.mp4"))
     assert j["status"] == "done" and j["incidents_found"] == 0 and j["incident_ids"] == [] and j["check_id"]
@@ -303,9 +303,9 @@ def test_retention_deletes_old_result_videos_but_keeps_records(client, users, ar
         assert retention.purge_old_videos(db, days=0) == 0                              # days=0: tắt dọn dẹp
         assert retention.purge_old_videos(db, days=30) == 1
     assert not video.exists()
-    c = users["viewer"].get(f"/api/checks/{cid}").json()
+    c = users["admin"].get(f"/api/checks/{cid}").json()
     assert c["video"] is None and c["series"] and c["flooded"]                         # bản ghi + dãy t-p còn
-    assert users["viewer"].get(f"/api/checks/{cid}/video").status_code == 404
+    assert users["admin"].get(f"/api/checks/{cid}/video").status_code == 404
     inc = users["viewer"].get(f"/api/incidents/{iid}").json()
     assert inc["clip"] is None and inc["evidence"] and users["viewer"].get(inc["evidence"][0]["original"]).status_code == 200
 
@@ -362,7 +362,7 @@ def test_legacy_records_get_smoothed_p_recomputed_or_noted(client, users, area, 
     with SessionLocal() as db:
         r1 = recompute_legacy(db, cfg)
     assert r1["recomputed"] >= 1 and r1["kept_raw"] >= 1 and set(r1) == {"recomputed", "aligned", "kept_raw"}
-    v = users["viewer"]
+    v = users["admin"]
     c_ok = v.get(f"/api/checks/{ids[0]}").json()
     assert all(len(r) == 4 for r in c_ok["series"]) and [r[3] for r in c_ok["series"]] == expect and [r[1] for r in c_ok["series"]] == raw   # thô còn nguyên
     assert c_ok["p_max"] == pytest.approx(max(expect), abs=1e-3) and c_ok["p_max"] < max(raw) and c_ok["p_note"] is None
@@ -394,7 +394,7 @@ def test_new_analysis_stores_smoothed_p_max(client, users, area, admin, tmp_path
     w.release()
     j = _upload_and_wait(client, users["uploader"], ar["id"], (tmp_path / "s.mp4").read_bytes())
     client.app.state.holder.model = None
-    c = users["viewer"].get(f"/api/checks/{j['check_id']}").json()
+    c = users["admin"].get(f"/api/checks/{j['check_id']}").json()
     assert all(len(r) == 4 for r in c["series"]) and c["p_note"] is None
     assert c["p_max"] == pytest.approx(max(r[3] for r in c["series"]), abs=1e-3) and c["p_max"] < max(r[1] for r in c["series"])
     for iid in j["incident_ids"]:
@@ -413,7 +413,7 @@ def test_checks_from_previous_build_get_p_max_aligned_to_smoothed(client, users,
         cid = c.id
         r = recompute_legacy(db, config.ModelConfig())
     assert r["aligned"] >= 1
-    got = users["viewer"].get(f"/api/checks/{cid}").json()
+    got = users["admin"].get(f"/api/checks/{cid}").json()
     assert got["p_max"] == pytest.approx(max(x[3] for x in rows), abs=1e-3) and got["p_note"] is None
     inc = [i for i in users["viewer"].get(f"/api/incidents?area_id={area['id']}").json() if i["check_id"] == cid][0]
     assert inc["p_max"] == pytest.approx(max(x[3] for x in rows if x[0] < 2.0), abs=1e-3)

@@ -56,3 +56,15 @@ figure{margin:0}figcaption{font-size:13px;color:var(--muted)}
 .vbox{max-width:860px}.vbox video{width:100%;max-height:70vh;border-radius:6px;background:#000;display:block}
 .pbar{display:flex;gap:12px;align-items:center;margin-bottom:8px;font-size:17px}
 .pill.ok{background:var(--ok);color:#fff}
+
+header.top nav a{text-decoration:none;padding:4px 2px;border-bottom:2px solid transparent}
+header.top nav a.on{border-bottom-color:var(--brand);font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.stat b{display:block;font-size:28px;line-height:1.1}.stat.hot b{color:var(--danger)}
+.stat a{text-decoration:none;color:inherit;display:block}
+.irow{display:flex;gap:12px;align-items:center;padding:10px;background:var(--card);border:1px solid var(--line);border-radius:8px}
+.irow img,.irow .noimg{width:96px;height:64px;flex:none;object-fit:cover;border-radius:6px;background:var(--line)}
+.irow .info{flex:1;min-width:0}.irow .info a{font-weight:600}.irow .acts{display:flex;gap:6px;flex-wrap:wrap}
+.irow .acts button{padding:5px 10px;font-size:14px}
+@media (max-width:600px){.irow{flex-wrap:wrap}.irow .info{flex-basis:calc(100% - 112px)}.irow .acts{width:100%}.irow .acts button{flex:1}.stat b{font-size:24px}}

@@ -26,7 +26,7 @@ function render(i) {
     <dt>Model</dt><dd>${esc(i.model_name || '—')}</dd>
     <dt>Người gửi</dt><dd>${esc(i.uploader || (i.source === 'device' ? 'thiết bị ngoài' : '—'))}</dd>
     <dt>Trạng thái</dt><dd><span class="pill ${i.status}">${STATUS_VI[i.status]}</span></dd>`;
-  if (i.clip) { $('clipSlot').replaceChildren(videoBox(i.clip, i.series, i.clip_start)); $('clipBox').hidden = false; if (i.check_id) $('clipNote').innerHTML = `Video bắt đầu ở lúc sự cố xảy ra. <a href="/checks/${i.check_id}">Xem cả lần kiểm tra</a>`; }
+  if (i.clip) { $('clipSlot').replaceChildren(videoBox(i.clip, i.series, i.clip_start)); $('clipBox').hidden = false; if (i.check_id) $('clipNote').innerHTML = 'Video bắt đầu ở lúc sự cố xảy ra.' + ({{ 'true' if user.role != 'viewer' else 'false' }} ? ` <a href="/checks/${i.check_id}">Xem cả lần kiểm tra</a>` : ''); }
   $('ev').innerHTML = i.evidence.map(e => `
     <div class="trip">${[['original', 'Ảnh gốc'], ['overlay', 'Vùng nước'], ['crop', 'Ảnh cắt']].filter(([k]) => e[k]).map(([k, t]) =>
       `<figure><a href="${e[k]}" target="_blank" rel="noopener"><img loading="lazy" src="${e[k]}" alt="${t}"></a><figcaption>${t}${k === 'original' && e.t_s != null ? ' · ' + fmtSec(e.t_s) : ''}</figcaption></figure>`).join('')}</div>`).join('');

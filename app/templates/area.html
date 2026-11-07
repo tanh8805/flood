@@ -4,8 +4,10 @@
 <p><a href="/areas">← Khu vực</a></p>
 <div id="msg" class="banner err" hidden></div>
 <div class="card"><h1 id="name">Đang tải…</h1><p class="muted" id="desc"></p><p id="state"></p></div>
-<h2>Lần kiểm tra gần đây</h2>
+{% if user.role != 'viewer' %}
+<h2>{{ 'Lần kiểm tra gần đây' if user.role == 'admin' else 'Lần kiểm tra của tôi' }}</h2>
 <ul id="checks" class="alist"></ul>
+{% endif %}
 <h2 style="margin-top:22px">Sự cố ngập</h2>
 <ul id="list" class="alist"></ul>
 {% endblock %}
@@ -14,10 +16,10 @@
 const $ = id => document.getElementById(id);
 async function load() {
   try {
-    const [a, incs, checks] = await Promise.all([api('/api/areas/{{ aid }}'), api('/api/incidents?area_id={{ aid }}&limit=50'), api('/api/checks?area_id={{ aid }}&limit=30')]);
+    const [a, incs, checks] = await Promise.all([api('/api/areas/{{ aid }}'), api('/api/incidents?area_id={{ aid }}&limit=50'), {{ 'Promise.resolve(null)' if user.role == 'viewer' else "api('/api/checks?area_id=" ~ aid ~ "&limit=30')" }}]);
     $('name').textContent = a.name; $('desc').textContent = a.description || '';
     $('state').innerHTML = `<span class="pill ${a.flooded ? 'flood' : 'normal'}">${a.flooded ? 'Đang ngập' : 'Bình thường'}</span> <span class="muted">Lần ngập gần nhất: ${a.last_at ? esc(relTime(a.last_at)) : 'chưa có'}</span>`;
-    $('checks').innerHTML = checks.length ? checks.map(c => `<li><a class="arow" href="/checks/${c.id}">
+    if (checks) $('checks').innerHTML = checks.length ? checks.map(c => `<li><a class="arow" href="/checks/${c.id}">
       <div class="info"><b>${esc(fmtTime(c.created_at))}</b><div class="muted">${esc(relTime(c.created_at))} · xác suất cao nhất ${(c.p_max * 100).toFixed(0)}%${c.p_note ? ' (p thô)' : ''} · ${esc(c.uploader || '—')}</div></div>
       <span class="pill ${c.flooded ? 'flood' : 'ok'}">${c.flooded ? 'Ngập' : 'Không ngập'}</span></a></li>`).join('') : '<li class="muted">Chưa có lần kiểm tra nào. Gửi video ở trang Gửi video.</li>';
     $('list').innerHTML = incs.length ? incs.map(i => `<li><a class="arow" href="/incidents/${i.id}">

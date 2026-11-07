@@ -12,7 +12,7 @@ from ..security import COOKIE, current_user, make_token, optional_user, require,
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(config.ROOT / "app" / "templates"))
-HOME = dict.fromkeys(("admin", "uploader", "viewer"), "/areas")
+HOME = {"admin": "/overview", "uploader": "/upload", "viewer": "/areas"}     # trang đầu sau đăng nhập theo vai trò
 
 
 def page(request: Request, name: str, user: User | None, **ctx):
@@ -72,8 +72,11 @@ def area_page(aid: int, request: Request, user: User = Depends(current_user), db
 
 @router.get("/checks/{cid}", response_class=HTMLResponse, include_in_schema=False)
 def check_page(cid: int, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    if not db.get(Check, cid):
+    c = db.get(Check, cid)
+    if not c:
         raise HTTPException(404, "Không có lần kiểm tra này")
+    if user.role != "admin" and not (user.role == "uploader" and c.uploader_id == user.id):
+        raise HTTPException(403, "Không đủ quyền xem lần kiểm tra này")
     return page(request, "check.html", user, cid=cid)
 
 
@@ -92,3 +95,13 @@ def upload_page(request: Request, user: User = Depends(require("uploader", "admi
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)
 def admin_page(request: Request, user: User = Depends(require("admin"))):
     return page(request, "admin.html", user)
+
+
+@router.get("/overview", response_class=HTMLResponse, include_in_schema=False)
+def overview_page(request: Request, user: User = Depends(require("admin"))):
+    return page(request, "overview.html", user, recent_hours=config.RECENT_HOURS)
+
+
+@router.get("/incidents", response_class=HTMLResponse, include_in_schema=False)
+def incidents_page(request: Request, user: User = Depends(require("admin"))):
+    return page(request, "incidents.html", user)

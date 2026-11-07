@@ -14,7 +14,7 @@
   <div id="res" class="banner" hidden></div>
   <div id="found"></div>
 </form>
-<div class="card"><h2>Lần gửi gần đây</h2><div class="scroll"><table id="jobs"><thead><tr><th>Thời gian</th><th>Khu vực</th><th>File</th><th>Kết quả</th></tr></thead><tbody></tbody></table></div></div>
+<div class="card"><h2>{{ "Lịch sử lần gửi (mọi người)" if user.role == "admin" else "Lịch sử lần gửi của tôi" }}</h2><div class="scroll"><table id="jobs"><thead><tr><th>Thời gian</th><th>Khu vực</th><th>File</th><th>Kết quả</th><th></th></tr></thead><tbody></tbody></table></div></div>
 {% endblock %}
 {% block script %}
 <script>
@@ -34,7 +34,7 @@ async function init() {
 async function loadJobs() {
   const jobs = await api('/api/jobs');
   $('jobs').tBodies[0].innerHTML = jobs.map(j => `<tr><td>${esc(fmtTime(j.created_at))}</td><td>${esc(j.area)}</td><td>${esc(j.filename)}</td>
-    <td>${JSTATUS[j.status]}${j.status === 'done' ? ' · ' + esc(j.message) : ''}${j.error ? ' · ' + esc(j.error) : ''}</td></tr>`).join('');
+    <td>${JSTATUS[j.status]}${j.status === 'done' ? ' · ' + esc(j.message) : ''}${j.error ? ' · ' + esc(j.error) : ''}</td><td>${j.check_id ? `<a href="/checks/${j.check_id}">Xem</a>` : ''}</td></tr>`).join('');
 }
 function setFile(f) { file = f; $('fname').textContent = f ? f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB)' : ''; ready(); }
 const dz = $('dz');

@@ -5,8 +5,13 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from datetime import timedelta
+
+from sqlalchemy.orm import joinedload
+
+from .. import config
 from ..db import get_db
-from ..models import Area, Incident, User, iso
+from ..models import Area, Check, Incident, User, iso, utcnow
 from ..security import ROLES, hash_password, require
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require("admin"))])
@@ -130,3 +135,22 @@ def model_status(request: Request):
     """Chỉ đọc: model nào đang đảm nhiệm vai trò nào. Không có nút/API nạp lại: đổi file là tự nạp (mtime)."""
     request.app.state.holder.refresh()
     return request.app.state.holder.status()
+
+
+@router.get("/overview")
+def overview(request: Request, db: Session = Depends(get_db)):
+    """Trang Tổng quan của admin: khu vực đang ngập, sự cố MỚI cần xử lý, lần kiểm tra gần đây, trạng thái model."""
+    from .api import EVENT_AT, area_out as api_area_out, check_out, inc_out
+    since = utcnow() - timedelta(hours=config.RECENT_HOURS)
+    areas = [api_area_out(db, a, since) for a in db.scalars(select(Area).where(Area.active))]
+    hot = sorted((a for a in areas if a["flooded"]), key=lambda a: a["last_at"] or "", reverse=True)
+    new = db.execute(select(Incident).options(joinedload(Incident.area), joinedload(Incident.uploader), joinedload(Incident.evidence))
+                     .where(Incident.status == "new").order_by(EVENT_AT.desc(), Incident.id.desc()).limit(30)).unique().scalars().all()
+    n_new = db.scalar(select(func.count()).select_from(Incident).where(Incident.status == "new"))
+    checks = db.scalars(select(Check).options(joinedload(Check.area), joinedload(Check.uploader)).order_by(Check.created_at.desc(), Check.id.desc()).limit(10)).unique().all()
+    request.app.state.holder.refresh()
+    st = request.app.state.holder.status()
+    return {"recent_hours": config.RECENT_HOURS, "areas_total": len(areas), "flooded_areas": [{"id": a["id"], "name": a["name"], "last_at": a["last_at"], "recent_count": a["recent_count"]} for a in hot],
+            "new_incidents_total": n_new, "new_incidents": [inc_out(i, detail=False) for i in new], "recent_checks": [check_out(c) for c in checks],
+            "model": {"loaded": st["loaded"], "error": st["error"], "decide": st["decide"].get("name"), "draw": st["draw"].get("name"), "draw_error": st["draw"].get("error"),
+                      "rule": ({k: st["config"][k] for k in ("window_s", "flood_on", "flood_off", "min_hold_s")} if st.get("config") else None)}}

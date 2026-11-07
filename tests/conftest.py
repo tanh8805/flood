@@ -64,6 +64,7 @@ def users(admin):
         r = admin.post("/api/admin/users", json={"username": f"u_{role}", "password": USER_PW, "role": role})
         assert r.status_code == 201, r.text
         out[role] = login(admin, f"u_{role}", USER_PW)
+    out["admin"] = admin
     return out
 
 
