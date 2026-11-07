@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Cảnh báo ngập">
+  <rect width="64" height="64" rx="14" fill="#0b5cad"/>
+  <path d="M32 9C24 21 17 28 17 37a15 15 0 0 0 30 0c0-9-7-16-15-28z" fill="#fff"/>
+  <path d="M6 50q6-5 13 0t13 0 13 0 13 0v8H6z" fill="#ffb300"/>
+  <path d="M32 24v14" stroke="#c62828" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="45" r="2.6" fill="#c62828"/>
+</svg>

@@ -5,7 +5,7 @@ Viewer xem danh sách khu vực (khu vực đang ngập lên đầu) và bấm v
 
 ## Kiến trúc
 ```
- trình duyệt ──► FastAPI (app/main.py) ──► routers/pages  (Jinja2: đăng nhập, danh sách khu vực, upload, chi tiết, quản trị)
+ trình duyệt ──► FastAPI (app/main.py) ──► routers/pages  (Jinja2: đăng nhập, tổng quan, danh sách khu vực, upload, chi tiết, quản trị)
  thiết bị ngoài ─ X-API-Key ─►            routers/api    (sự cố, lần kiểm tra, khu vực, job, ảnh/video có kiểm tra đăng nhập)
                                           routers/admin  (khu vực, tài khoản, model)
         upload video ─► jobs.JobRunner (1 luồng, 1 video một lúc)
@@ -18,8 +18,22 @@ Viewer xem danh sách khu vực (khu vực đang ngập lên đầu) và bấm v
                           SQLAlchemy (SQLite | PostgreSQL)  +  storage/ (ảnh, video kết quả, video tạm, secret.key)
 ```
 
-## Cài đặt và chạy
-Cần Python 3.12 (venv) hoặc Docker. Các file model nằm ở `models/`:
+## Chạy nhanh (một click)
+- **Linux:** chạy `tools/cai_bieu_tuong.sh` một lần để cài biểu tượng, rồi bấm biểu tượng **"Cảnh báo ngập"** trong menu ứng dụng. Hoặc chạy thẳng `./chay.sh`. Lần đầu script tự tạo `.venv`, cài `requirements.txt`, tải `best.pt` và `best_cpu.pt` từ Release v1.3 (bằng `gh`, không có thì `curl`) nếu thiếu, hỏi mật khẩu để tạo tài khoản `admin`; sau đó chạy web ở cổng 8000 (bận thì 8001), đợi sẵn sàng rồi tự mở trình duyệt. Ctrl+C để tắt.
+- **Windows:** double-click `chay.bat` (cần Python 3.12 với `py` launcher; làm tương đương: `.venv`, cài thư viện, tải model, tạo admin, chạy web, mở trình duyệt).
+- **So sánh cách tô vùng nước:** `./so_sanh.sh` mở hộp thoại chọn video (zenity, hoặc nhập đường dẫn), chạy `tools/so_sanh_seg.py --model both` rồi mở video kết quả (cần trọng số V-FloodNet, xem mục "So sánh với V-FloodNet").
+
+## Chạy app
+Cần Python 3.12 (hoặc Docker, xem dưới). Bốn lệnh từ clone tới trình duyệt:
+```
+git clone https://github.com/tanh8805/flood.git && cd flood
+python -m venv venv && . venv/bin/activate && pip install -r requirements.txt     # có GPU: cài torch bản CUDA trước
+gh release download v1.3 -R tanh8805/flood -p best.pt -p best_cpu.pt -D models/ --clobber
+ADMIN_PASSWORD='<mật khẩu ≥ 8 ký tự>' python manage.py create-admin && uvicorn app.main:app --port 8000     # rồi mở http://localhost:8000
+```
+Đăng nhập bằng tài khoản `admin` với mật khẩu vừa đặt. Test: `pip install pytest httpx && python -m pytest tests -q`.
+
+Các file model nằm ở `models/` (xem `models/README.md`):
 
 | file | trong git? | vai trò |
 |---|---|---|
@@ -27,54 +41,74 @@ Cần Python 3.12 (venv) hoặc Docker. Các file model nằm ở `models/`:
 | `models/best.pt` (~580 MB, CLIP ViT-L/14 fp16, > 100 MB nên không đẩy lên git) | **không**, đính kèm **Release v1.3** | quyết định ngập khi có GPU |
 | `models/best_cpu.pt` (~335 MB, CLIP ViT-B/32 fp32) | **không**, đính kèm **Release v1.3** | quyết định ngập khi không có GPU (app tự chọn) |
 
-### 1. Tải `best.pt` và `best_cpu.pt` về `models/`
-```
-gh release download v1.3 -R tanh8805/flood -p best.pt -p best_cpu.pt -D models/ --clobber
-```
-Không có `gh` (repo công khai) thì dùng curl:
-```
-curl -L -o models/best.pt https://github.com/tanh8805/flood/releases/download/v1.3/best.pt
-curl -L -o models/best_cpu.pt https://github.com/tanh8805/flood/releases/download/v1.3/best_cpu.pt
-```
-Repo riêng tư mà không có `gh`: `curl -L -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" -o models/best.pt "$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/tanh8805/flood/releases/tags/v1.3 | python -c 'import sys,json;print(json.load(sys.stdin)["assets"][0]["url"])')"`.
-**Chọn model theo thiết bị:** có GPU (CUDA) thì dùng `best.pt` (L-14, fp16); không có GPU (hoặc `MODEL_DEVICE=cpu`) thì dùng `best_cpu.pt` (B-32 fp32, ~74 ms/khung trên CPU, trong khi L-14 trên CPU ~0,9 s/khung). Thiếu `best_cpu.pt` thì dùng `best.pt` cho cả hai (adapter tự đổi L-14 về fp32 trên CPU, rất chậm). **Luật bật/tắt nằm trong chính file model** (mục `rule` của `config.json` nhúng) nên mỗi model dùng luật riêng của nó. Thiếu cả hai thì app vẫn chạy nhưng trang Gửi video báo "Chưa có model".
+Không có `gh` thì tải bằng curl từ `https://github.com/tanh8805/flood/releases/download/v1.3/<tên file>`. **Chọn model theo thiết bị:** có GPU (CUDA) thì dùng `best.pt` (L-14, fp16); không có GPU (hoặc `MODEL_DEVICE=cpu`) thì dùng `best_cpu.pt` (B-32 fp32, ~74 ms/khung trên CPU, trong khi L-14 trên CPU ~0,9 s/khung). Thiếu `best_cpu.pt` thì dùng `best.pt` cho cả hai (rất chậm trên CPU). **Luật bật/tắt nằm trong chính file model** (mục `rule` của `config.json` nhúng) nên mỗi model dùng luật riêng. Thiếu cả hai thì app vẫn chạy nhưng trang Gửi video báo "Chưa có model".
 
-### 2a. Chạy bằng venv
-```
-python -m venv venv && . venv/bin/activate
-pip install -r requirements.txt
-export ADMIN_PASSWORD='<mật khẩu của bạn, ≥ 8 ký tự>'
-python manage.py create-admin              # tài khoản "admin"; hoặc --username, hoặc bỏ biến để được hỏi mật khẩu
-uvicorn app.main:app --port 8000           # mở http://localhost:8000
-pip install -r requirements-dev.txt     # httpx + pytest (chỉ để chạy test)
-python -m pytest tests -q
-```
-Muốn GPU thì cài torch bản CUDA trước `pip install -r requirements.txt`; `best.pt` tự chạy trên GPU nếu có (`MODEL_DEVICE=cpu` để ép CPU).
-
-### 2b. Chạy bằng Docker
+### Chạy bằng Docker
 ```
 docker compose up -d --build
 docker compose exec -e ADMIN_PASSWORD='<mật khẩu của bạn>' app python manage.py create-admin
 ```
-`models/` được mount từ máy chủ (nên đã tải `best.pt` ở bước 1); ảnh và DB nằm trong volume `flood-storage`. Image dùng torch bản CPU. Đặt `DEVICE_API_KEY` (và `SECRET_KEY` nếu muốn) trong môi trường hoặc file `.env` (không đưa vào git).
+`models/` được mount từ máy chủ (nên đã tải model ở trên); ảnh và DB nằm trong volume `flood-storage`. Image dùng torch bản CPU (tự dùng `best_cpu.pt`). Đặt `DEVICE_API_KEY` (và `SECRET_KEY` nếu muốn) trong môi trường hoặc file `.env` (không đưa vào git).
 
-### 3. Dùng
-Đăng nhập bằng admin, vào **Quản trị** tạo khu vực (chỉ cần tên và mô tả) và tài khoản. Mật khẩu luôn do bạn đặt: repo không có mật khẩu mẫu nào. Test dùng mật khẩu ngẫu nhiên mỗi lần chạy (đặt `TEST_ADMIN_PASSWORD`, `TEST_USER_PASSWORD` nếu muốn cố định). Không dùng bản đồ nên app chạy được hoàn toàn offline.
+### Dùng
+Đăng nhập bằng admin (vào trang **Tổng quan**), mở **Khu vực & tài khoản** để tạo khu vực (chỉ cần tên và mô tả) và tài khoản. Mật khẩu luôn do bạn đặt: repo không có mật khẩu mẫu nào. Test dùng mật khẩu ngẫu nhiên mỗi lần chạy (đặt `TEST_ADMIN_PASSWORD`, `TEST_USER_PASSWORD` nếu muốn cố định). Không dùng bản đồ nên app chạy được hoàn toàn offline.
 
-**Trang chính** là danh sách khu vực: khu vực có sự cố trong `RECENT_HOURS` giờ qua lên đầu với nhãn đỏ "Đang ngập", còn lại nhãn xám "Bình thường". Mỗi dòng có lần ngập gần nhất ("12 phút trước"), số sự cố trong khoảng đó và một ảnh minh chứng nhỏ của sự cố mới nhất. Có ô lọc theo tên và tự làm mới mỗi 30 giây. Bấm khu vực để xem danh sách sự cố, bấm tiếp để xem chi tiết.
-
-Chưa có migration: bảng tạo bằng `create_all`; DB SQLite từ bản có bản đồ cũ cần xoá `storage/app.db` để tạo lại.
+**Trang Khu vực** là danh sách khu vực: khu vực có sự cố trong `RECENT_HOURS` giờ qua lên đầu với nhãn đỏ "Đang ngập", còn lại nhãn xám "Bình thường". Mỗi dòng có lần ngập gần nhất ("12 phút trước"), số sự cố trong khoảng đó và một ảnh minh chứng nhỏ của sự cố mới nhất. Có ô lọc theo tên và tự làm mới mỗi 30 giây. Bấm khu vực để xem danh sách sự cố, bấm tiếp để xem chi tiết.
 
 ## Tài khoản và vai trò
-| role | làm được |
-|---|---|
-| `viewer` | xem khu vực, sự cố, ảnh, video kết quả |
-| `uploader` | như viewer + gửi video, xem job của mình |
-| `admin` | tất cả + quản lý khu vực/tài khoản, đổi trạng thái sự cố (mới / đã xác nhận / báo nhầm), xoá sự cố |
+Mỗi vai trò vào một trang riêng sau khi đăng nhập và bị chặn ở backend (API trả 403), không chỉ ẩn nút.
+
+| role | trang đầu | làm được |
+|---|---|---|
+| `admin` | Tổng quan | menu: Tổng quan (số khu vực đang ngập, sự cố MỚI cần xử lý với nút Xác nhận / Báo nhầm, lần kiểm tra gần đây, trạng thái model), Sự cố, Khu vực & tài khoản, Gửi video; đổi trạng thái / xoá sự cố; xem mọi lần kiểm tra |
+| `uploader` | Gửi video | Gửi video, lịch sử lần gửi và lần kiểm tra của chính mình, Khu vực và chi tiết sự cố |
+| `viewer` | Khu vực | chỉ Khu vực (danh sách cảnh báo) và chi tiết sự cố; không thấy Gửi video, Khu vực & tài khoản, nút đổi trạng thái |
 
 Sự cố "báo nhầm" không làm khu vực "Đang ngập".
 
-Tạo tài khoản: admin đầu tiên bằng `python manage.py create-admin`; các tài khoản khác ở trang **Quản trị** hoặc `POST /api/admin/users` (JSON `{"username", "password" (≥ 8 ký tự), "role"}`, cần đăng nhập admin). Thiết bị ngoài không cần tài khoản: gửi `X-API-Key` (xem mục API).
+Tạo tài khoản: admin đầu tiên bằng `python manage.py create-admin`; các tài khoản khác ở trang **Khu vực & tài khoản** hoặc `POST /api/admin/users` (JSON `{"username", "password" (≥ 8 ký tự), "role"}`, cần đăng nhập admin). Thiết bị ngoài không cần tài khoản: gửi `X-API-Key` (xem mục API).
+
+## Cấu trúc thư mục
+```
+app/                    web app (best.pt quyết định, seg.pt tô, chỉ tô khi NGẬP)
+models/                 best.pt, best_cpu.pt, seg.pt (+ README.md: tải từ Release)
+tools/so_sanh_seg.py    video so sánh cách tô vùng nước (xem bên dưới), không thuộc app
+docs/ket_qua.md         bảng các thí nghiệm, bảng 4 cách tô, hạn chế
+tests/                  pytest (phân quyền, adapter, phân tích video, API)
+requirements.txt        app;  requirements-so-sanh.txt: thêm cho V-FloodNet
+chay.sh  chay.bat  so_sanh.sh   chạy nhanh (xem trên);  tools/cai_bieu_tuong.sh: biểu tượng menu Linux
+manage.py  Dockerfile  docker-compose.yml
+```
+
+## So sánh với V-FloodNet
+`tools/so_sanh_seg.py` dựng video so sánh cách tô vùng nước của nhóm (`seg.pt`) với **V-FloodNet** (model ảnh pretrained, LinkNet + EfficientNet-B4). Cả hai dùng chung quyết định ngập của `best.pt`; chỉ tô khi đang NGẬP; % ngập ghi phía trên video. Không thuộc app, app không dùng V-FloodNet.
+
+**Trọng số V-FloodNet (không nằm trong repo, tải từ nguồn gốc):** tải `records.zip` (~800 MB) ở https://huggingface.co/xmlyqing00/V-FloodNet/tree/main (hoặc thư mục Google Drive trong README của https://github.com/xmlyqing00/V-FloodNet), giải nén lấy `records/link_efficientb4_model.pth`, đặt ngoài repo và trỏ bằng biến môi trường:
+```
+export VFLOODNET_PATH=~/models_ngoai/vfloodnet/records/link_efficientb4_model.pth     # mặc định chính đường dẫn này
+pip install -r requirements-so-sanh.txt
+```
+Ba lệnh (`--out` = thư mục ra, mặc định `~/Videos/ngap/so_sanh/`; mỗi video ra kèm 1 ảnh `.jpg`):
+```
+python tools/so_sanh_seg.py video.mp4 --model seg         # video chỉ tô bằng seg.pt        -> video_seg.mp4
+python tools/so_sanh_seg.py video.mp4 --model vfloodnet   # video chỉ tô bằng V-FloodNet    -> video_vfloodnet.mp4
+python tools/so_sanh_seg.py video.mp4 --model both        # ghép ngang 2 bên (mặc định)     -> video_so_sanh.mp4
+```
+Thiếu trọng số hoặc thư viện thì script báo rõ cách tải rồi dừng (không crash); `--model seg` không cần V-FloodNet. Kết quả đo (IoU, % tô nhầm) nằm ở `docs/ket_qua.md`, mục 4: V-FloodNet tô nhầm nhiều hơn `seg.pt` trên bộ khung của nhóm.
+
+**Trích dẫn.** Liang, Y., Li, X., Tsai, B., Chen, Q., Jafari, N. (2023). *V-FloodNet: A video segmentation system for urban flood detection and quantification.* Environmental Modelling & Software, 160, 105586.
+```
+@article{liang2023v,
+  title={V-FloodNet: A video segmentation system for urban flood detection and quantification},
+  author={Liang, Yongqing and Li, Xin and Tsai, Brian and Chen, Qin and Jafari, Navid},
+  journal={Environmental Modelling \& Software},
+  volume={160},
+  pages={105586},
+  year={2023},
+  publisher={Elsevier}
+}
+```
+Mã và trọng số thuộc tác giả (README gốc ghi "All rights are reserved"), nên repo này không phân phối lại trọng số.
 
 ## Hai model, hai vai trò tách bạch
 | Vai trò | File | Ảnh hưởng |
@@ -88,10 +122,11 @@ Không cần `open_clip`: `best.pt` chứa sẵn backbone. Lý do tách: model n
 - **Cắt viền đen.** Trước cả `best.pt` và `seg.pt`, viền đen letterbox/pillarbox được cắt (`crop_black_border`, mặc định bật; `app/crop.py`). Hộp cắt tính một lần từ 9 khung rải đều; cột/hàng chỉ là viền khi đen thuần ở mọi khung và liền từ mép khung, nên cảnh ban đêm không bị cắt nhầm; không cắt nếu viền < 2% hoặc phần còn lại < 50% mỗi chiều. Video kết quả và ảnh minh chứng là phần đã cắt; `info["crop"]` ghi hộp cắt.
 - **Cách tô vùng nước.** Chỉ tô khi đang **NGẬP**; không ngập thì `seg.pt` không chạy và video giữ khung gốc. Suy luận: `conf=0.4` (`water_conf`), `retina_masks=True`, khung rộng hơn 960 px được thu về rộng 960 (`draw_width`, 0 = không thu). Mask được làm sạch (open/close, bỏ mảng nhỏ hơn 1% khung) rồi làm mượt theo thời gian như `WaterSmoother(0.6)` (không nhấp nháy, reset mỗi lần ngập mới). Ảnh minh chứng dùng mask chưa làm mượt của chính khung đó.
 - **Đổi model = chép file.** Mỗi model tự nạp lại khi file của nó đổi (mtime), không cần khởi động lại và không có nút/API nạp lại. Chép `seg.pt` mới thì chỉ model tô nạp lại, chép `best.pt` thì chỉ model quyết định nạp lại. Video đang phân tích dở vẫn dùng model cũ. File lỗi chỉ bị nạp lại khi file đổi tiếp. Lỗi ở `seg.pt` không làm mất việc quyết định.
-- **Trang Quản trị** hiển thị (chỉ đọc) model nào đang đảm nhiệm vai trò nào và các ngưỡng.
+- **Trang Khu vực & tài khoản** hiển thị (chỉ đọc) model nào đang đảm nhiệm vai trò nào và các ngưỡng.
 - **Thêm adapter mới:** viết lớp có `predict(frame_bgr) -> {"p_ngap": float, "mask": bool HxW | None}` và đăng ký trong `app/adapters/__init__.py` (`build_decider` / `build_drawer`). Phần còn lại của app chỉ dùng interface này (qua `Composite`).
 
-### Tham số (`models/model.yaml`, xem `model.yaml.example`)
+### Tham số (`models/model.yaml`, tuỳ chọn)
+File YAML phẳng, mọi khoá đều tuỳ chọn: `path`, `cpu_path`, `seg_path`, `device` (auto/cpu/cuda), `water_classes`, `water_conf`, `draw_width`, `flood_on`, `flood_off`, `window_s`, `min_hold_s`, `crop_black_border`, `segment_s`, `infer_fps`. Ví dụ: `flood_on: 0.95`.
 Thứ tự ưu tiên: mặc định < luật nhúng trong file model đang dùng < `model.yaml` < biến môi trường (`MODEL_PATH`, `MODEL_CPU_PATH`, `MODEL_SEG_PATH`, `MODEL_DEVICE`, `FLOOD_ON`, `FLOOD_OFF`, `WINDOW_S`, `MIN_HOLD_S`, `CROP_BLACK_BORDER`, `SEGMENT_S`, `INFER_FPS`, `WATER_CLASSES`, `WATER_CONF`, `DRAW_WIDTH`).
 Mặc định: 5 khung/giây, p trung bình trượt (L-14: 1 s, B-32: 2 s), bật khi p ≥ 0,9, tắt khi p < 0,3, giữ tối thiểu 10 s, cắt viền đen bật, đoạn 2 s.
 

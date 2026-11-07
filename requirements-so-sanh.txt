@@ -1,0 +1,3 @@
+# Chỉ cần cho tools/so_sanh_seg.py với --model vfloodnet | both (cài thêm sau requirements.txt)
+segmentation-models-pytorch>=0.5
+efficientnet-pytorch
