@@ -5,7 +5,7 @@ Quyết định ngập lấy từ best.pt của app (GPU) hoặc best_cpu.pt, lu
 Phía trên video ghi "Xác suất ngập (p làm mượt)" và trạng thái. Mỗi video xuất kèm 1 ảnh chụp (giữa đợt báo NGẬP đầu tiên).
 Cần: segmentation-models-pytorch (>=0.5), efficientnet-pytorch, Pillow, ffmpeg (các thư viện này KHÔNG có trong requirements.txt của app).
 Dùng (từ thư mục flood-alert):  python tools/so_sanh_seg.py [clip ...] [--demo-dir DIR] [--out DIR]
-Mặc định clip = demo_01 demo_02 demo_03 demo_05; --demo-dir mặc định ~/Videos/ngap/demo (hoặc ~/Videos/demo_test/chuyen_ngap nếu chưa có); --out mặc định ~/Videos/ngap/so_sanh."""
+Mặc định clip = demo_01 demo_02 demo_03 demo_05; --demo-dir mặc định ~/Videos/ngap/demo; --out mặc định ~/Videos/ngap/so_sanh."""
 import argparse
 import io
 import pickle
@@ -158,7 +158,7 @@ def main():
     ap.add_argument("--demo-dir", default=None)
     ap.add_argument("--out", default=str(HOME / "Videos/ngap/so_sanh"))
     a = ap.parse_args()
-    d = Path(a.demo_dir) if a.demo_dir else next(p for p in (HOME / "Videos/ngap/demo", HOME / "Videos/demo_test/chuyen_ngap") if p.exists())
+    d = Path(a.demo_dir) if a.demo_dir else HOME / "Videos/ngap/demo"
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     cfg = config.load_model_config()
     dec = build_decider(cfg, config.MODELS_DIR)
