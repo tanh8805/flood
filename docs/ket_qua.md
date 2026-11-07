@@ -38,8 +38,9 @@ Luật chọn khác nhau giữa các fold (nhất là L-14: fold 3 chọn bật 
 | Lần 2 (B-32 v1.0, giữ 10 s) | 0,727 | 0,968 | 0,830 | demo_01 64/66, 0 FP, bật 52,6 s (nhãn 48 s); demo_02 FP 2→5; demo_03 15/56; demo_05 10/18 |
 | L-14 v1.1, chỉ demo_01 | 1,000 | 0,815 | 0,898 | 66/66, 15 FP, bật 14,0 s (sớm 34 s) |
 | B-32 v1.2 luật 2 s/0,4, chỉ demo_01 | 0,955 | 1,000 | 0,977 | 63/66, 0 FP, bật 53,2 s |
-| **v1.3 (L-14, GPU), chỉ demo_01** | DEMO01_RECALL | DEMO01_PREC | DEMO01_F1 | DEMO01_NOTE |
+| **v1.3 (L-14, GPU), chỉ demo_01** | 1,000 | 0,786 | 0,880 | 66/66 đoạn ngập, 18 FP, bật lúc 13,0 s (**sớm 35 s** so với nhãn 48 s); không tắt trước hết clip |
 
+Thời gian `analyze_video(demo_01)` (180 s video, GPU RTX 3050, L-14 + seg.pt): 55,6 s khi không ghi video kết quả, 167,8 s khi ghi video kết quả như app (ghi video là phần tốn nhất).
 Chưa chấm lại demo_02, demo_03, demo_05 với model v1.3 (chỉ demo_01, một lần, chỉ để ghi lại, không dùng để chọn lại).
 
 ## 4. Model tô vùng nước: so 4 cách, giữ seg.pt cũ
@@ -59,7 +60,7 @@ So trên 664 khung đánh giá (388 khung ngập có mask Đạt, 276 khung khô
 - seg.pt cũ có thể đã thấy một phần các khung này nên số của nó nghiêng về phía có lợi cho nó.
 
 ## 5. Hạn chế đã biết
-1. **Bật sớm khi đường rất ướt.** Đường ướt/mưa to chưa tràn lòng đường vẫn có thể cho p ≥ 0,9; giữ 10 s kéo dài cảnh báo sai đó (demo_02: FP 2→5 đoạn khi thêm giữ 10 s; demo_01 với L-14 v1.1: bật từ 14 s trong khi nước tràn lòng đường ở 48 s).
+1. **Bật sớm khi đường rất ướt.** Với v1.3 vẫn còn: demo_01 báo từ 13 s trong khi nước tràn lòng đường lúc 48 s (precision 0,786). Đây là điểm yếu đã biết, chưa khắc phục. Đường ướt/mưa to chưa tràn lòng đường vẫn có thể cho p ≥ 0,9; giữ 10 s kéo dài cảnh báo sai đó (demo_02: FP 2→5 đoạn khi thêm giữ 10 s; demo_01 với L-14 v1.1: bật từ 14 s trong khi nước tràn lòng đường ở 48 s).
 2. **Camera nhìn đường quá xa / nước đục.** Trên clip mới recall chỉ 0,768 (L-14) và 0,616 (B-32); demo_03: chỉ 15/56 đoạn ngập được báo (B-32 v1.0), bật lúc 125,4 s so với nhãn 68 s.
 3. **Sát ngưỡng.** p trung bình quanh 0,9 làm thời điểm bật lệch nhiều giây chỉ vì sai số cỡ 3·10⁻⁴ (fp16 so với fp32, cách giải mã video). `best.pt` L-14 fp16 lệch p so với pipeline open_clip fp16 tới 0,0077 trên 48 khung kiểm (đa số ≤ 0,001) và có thể đổi thời điểm bật vài giây.
 4. **Tốc độ CPU.** L-14 ~0,9 s/khung trên CPU (nên cần GPU); B-32 ~74 ms/khung.
