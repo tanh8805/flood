@@ -15,8 +15,8 @@ from .seg import SegAdapter
 
 
 def build_decider(cfg, models_dir: Path):
-    """Model quyết định: models/best.pt (TorchScript)."""
-    path = Path(models_dir) / cfg.path
+    """Model quyết định: GPU -> models/best.pt (L-14), không có GPU -> models/best_cpu.pt (B-32) nếu có (TorchScript)."""
+    path = config.resolve_decider_path(cfg, models_dir)
     if not path.exists():
         raise FileNotFoundError(config.NO_MODEL_MSG)
     return BestAdapter(path, device=cfg.device)
@@ -78,7 +78,7 @@ class ModelHolder:
             cfg = config.load_model_config(self.models_dir)
         except Exception as e:                      # model.yaml hỏng: chờ tới khi file đổi
             return {"decide": ("cfg-error", str(e), yml), "draw": ("cfg-error", str(e), yml)}
-        return {"decide": (_mtime(self.models_dir / cfg.path), cfg.device, yml),
+        return {"decide": (_mtime(config.resolve_decider_path(cfg, self.models_dir)), config.resolve_decider_path(cfg, self.models_dir).name, cfg.device, yml),
                 "draw": (_mtime(self.models_dir / cfg.seg_path), yml)}
 
     def refresh(self):

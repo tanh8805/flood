@@ -19,23 +19,25 @@ Viewer xem danh sách khu vực (khu vực đang ngập lên đầu) và bấm v
 ```
 
 ## Cài đặt và chạy
-Cần Python 3.12 (venv) hoặc Docker. Hai file model nằm ở `models/`:
+Cần Python 3.12 (venv) hoặc Docker. Các file model nằm ở `models/`:
 
 | file | trong git? | vai trò |
 |---|---|---|
 | `models/seg.pt` (~20 MB) | có | chỉ tô vùng nước |
-| `models/best.pt` (~335 MB, CLIP ViT-B/32, > 100 MB nên không đẩy lên git) | **không**, đính kèm **Release v1.2** (cùng file với v1.0; v1.1 là bản L-14 580 MB, không dùng, xem `docs/ket_qua.md`) | quyết định ngập |
+| `models/best.pt` (~580 MB, CLIP ViT-L/14 fp16, > 100 MB nên không đẩy lên git) | **không**, đính kèm **Release v1.3** | quyết định ngập khi có GPU |
+| `models/best_cpu.pt` (~335 MB, CLIP ViT-B/32 fp32) | **không**, đính kèm **Release v1.3** | quyết định ngập khi không có GPU (app tự chọn) |
 
-### 1. Tải `best.pt` về `models/`
+### 1. Tải `best.pt` và `best_cpu.pt` về `models/`
 ```
-gh release download v1.2 -R tanh8805/flood -p best.pt -D models/ --clobber
+gh release download v1.3 -R tanh8805/flood -p best.pt -p best_cpu.pt -D models/ --clobber
 ```
 Không có `gh` (repo công khai) thì dùng curl:
 ```
-curl -L -o models/best.pt https://github.com/tanh8805/flood/releases/download/v1.2/best.pt
+curl -L -o models/best.pt https://github.com/tanh8805/flood/releases/download/v1.3/best.pt
+curl -L -o models/best_cpu.pt https://github.com/tanh8805/flood/releases/download/v1.3/best_cpu.pt
 ```
-Repo riêng tư mà không có `gh`: `curl -L -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" -o models/best.pt "$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/tanh8805/flood/releases/tags/v1.2 | python -c 'import sys,json;print(json.load(sys.stdin)["assets"][0]["url"])')"`.
-`best.pt` (B-32) lưu trọng số fp32, chạy được cả CPU (~55 ms/khung) lẫn GPU (~10 ms/khung). Nếu cắm bản L-14 fp16 (Release v1.1) thì adapter tự đổi về fp32 trên CPU (`.float()`), chậm ~1 s/khung. Thiếu `best.pt` thì app vẫn chạy nhưng trang Gửi video báo "Chưa có model".
+Repo riêng tư mà không có `gh`: `curl -L -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream" -o models/best.pt "$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/tanh8805/flood/releases/tags/v1.3 | python -c 'import sys,json;print(json.load(sys.stdin)["assets"][0]["url"])')"`.
+**Chọn model theo thiết bị:** có GPU (CUDA) thì dùng `best.pt` (L-14, fp16); không có GPU (hoặc `MODEL_DEVICE=cpu`) thì dùng `best_cpu.pt` (B-32 fp32, ~74 ms/khung trên CPU, trong khi L-14 trên CPU ~0,9 s/khung). Thiếu `best_cpu.pt` thì dùng `best.pt` cho cả hai (adapter tự đổi L-14 về fp32 trên CPU, rất chậm). **Luật bật/tắt nằm trong chính file model** (mục `rule` của `config.json` nhúng) nên mỗi model dùng luật riêng của nó. Thiếu cả hai thì app vẫn chạy nhưng trang Gửi video báo "Chưa có model".
 
 ### 2a. Chạy bằng venv
 ```
@@ -44,6 +46,7 @@ pip install -r requirements.txt
 export ADMIN_PASSWORD='<mật khẩu của bạn, ≥ 8 ký tự>'
 python manage.py create-admin              # tài khoản "admin"; hoặc --username, hoặc bỏ biến để được hỏi mật khẩu
 uvicorn app.main:app --port 8000           # mở http://localhost:8000
+pip install -r requirements-dev.txt     # httpx + pytest (chỉ để chạy test)
 python -m pytest tests -q
 ```
 Muốn GPU thì cài torch bản CUDA trước `pip install -r requirements.txt`; `best.pt` tự chạy trên GPU nếu có (`MODEL_DEVICE=cpu` để ép CPU).
@@ -76,12 +79,12 @@ Tạo tài khoản: admin đầu tiên bằng `python manage.py create-admin`; c
 ## Hai model, hai vai trò tách bạch
 | Vai trò | File | Ảnh hưởng |
 |---|---|---|
-| **Quyết định ngập (tính %)** | `models/best.pt`: TorchScript, `p = m(khung BGR)` (khung bất kỳ cỡ nào, model tự resize/chuẩn hoá; **không** tự đổi RGB hay resize ở ngoài) | p, luật bật/tắt, nhãn Ngập/Không ngập, sự cố |
+| **Quyết định ngập (tính %)** | `models/best.pt` (GPU, L-14) hoặc `models/best_cpu.pt` (CPU, B-32): TorchScript, `p = m(khung BGR)` (khung bất kỳ cỡ nào, model tự resize/chuẩn hoá; **không** tự đổi RGB hay resize ở ngoài) | p, luật bật/tắt, nhãn Ngập/Không ngập, sự cố |
 | **Tô vùng nước** | `models/seg.pt` (Ultralytics **segment**, lớp `water`) | Chỉ tô vùng nước lên video và ảnh minh chứng; không ảnh hưởng %. Không có `seg.pt` thì video giữ khung gốc. |
 
 Không cần `open_clip`: `best.pt` chứa sẵn backbone. Lý do tách: model nước đo diện tích nước nên báo nhầm đường ướt ban đêm; `best.pt` phân biệt được chuyện đó.
 
-- **Luật ngập (mặc định).** 5 khung/giây; p trung bình trong 2 giây; bật NGẬP khi trung bình ≥ 0,9, tắt khi < 0,4; **sau khi bật, giữ NGẬP tối thiểu 10 giây** (`min_hold_s`, chống chớp tắt) rồi mới áp luật tắt; báo theo đoạn 2 giây (đoạn ngập khi ≥ 50% mẫu đang bật), các đoạn ngập liền nhau gộp thành 1 sự cố. Luật chọn bằng kiểm chéo lồng trên dữ liệu train (recall tối đa với precision ≥ 0,97); hạ ngưỡng bật xuống dưới 0,9 làm precision rơi về 0,94–0,95 nên không dùng.
+- **Luật ngập (mặc định, đọc từ model đang dùng).** 5 khung/giây; **L-14 (`best.pt`): p trung bình trong 1 giây, bật ≥ 0,9, tắt < 0,3. B-32 (`best_cpu.pt`): trong 2 giây, bật ≥ 0,9, tắt < 0,3**; **sau khi bật, giữ NGẬP tối thiểu 10 giây** (`min_hold_s`, chống chớp tắt) rồi mới áp luật tắt; báo theo đoạn 2 giây (đoạn ngập khi ≥ 50% mẫu đang bật), các đoạn ngập liền nhau gộp thành 1 sự cố. Luật chọn bằng kiểm chéo lồng trên dữ liệu train (precision ≥ 0,98 trước, rồi recall tối đa); số liệu trong `docs/ket_qua.md`.
 - **Cắt viền đen.** Trước cả `best.pt` và `seg.pt`, viền đen letterbox/pillarbox được cắt (`crop_black_border`, mặc định bật; `app/crop.py`). Hộp cắt tính một lần từ 9 khung rải đều; cột/hàng chỉ là viền khi đen thuần ở mọi khung và liền từ mép khung, nên cảnh ban đêm không bị cắt nhầm; không cắt nếu viền < 2% hoặc phần còn lại < 50% mỗi chiều. Video kết quả và ảnh minh chứng là phần đã cắt; `info["crop"]` ghi hộp cắt.
 - **Cách tô vùng nước.** Chỉ tô khi đang **NGẬP**; không ngập thì `seg.pt` không chạy và video giữ khung gốc. Suy luận: `conf=0.4` (`water_conf`), `retina_masks=True`, khung rộng hơn 960 px được thu về rộng 960 (`draw_width`, 0 = không thu). Mask được làm sạch (open/close, bỏ mảng nhỏ hơn 1% khung) rồi làm mượt theo thời gian như `WaterSmoother(0.6)` (không nhấp nháy, reset mỗi lần ngập mới). Ảnh minh chứng dùng mask chưa làm mượt của chính khung đó.
 - **Đổi model = chép file.** Mỗi model tự nạp lại khi file của nó đổi (mtime), không cần khởi động lại và không có nút/API nạp lại. Chép `seg.pt` mới thì chỉ model tô nạp lại, chép `best.pt` thì chỉ model quyết định nạp lại. Video đang phân tích dở vẫn dùng model cũ. File lỗi chỉ bị nạp lại khi file đổi tiếp. Lỗi ở `seg.pt` không làm mất việc quyết định.
@@ -89,8 +92,8 @@ Không cần `open_clip`: `best.pt` chứa sẵn backbone. Lý do tách: model n
 - **Thêm adapter mới:** viết lớp có `predict(frame_bgr) -> {"p_ngap": float, "mask": bool HxW | None}` và đăng ký trong `app/adapters/__init__.py` (`build_decider` / `build_drawer`). Phần còn lại của app chỉ dùng interface này (qua `Composite`).
 
 ### Tham số (`models/model.yaml`, xem `model.yaml.example`)
-Thứ tự ưu tiên: mặc định < `model.yaml` < biến môi trường (`MODEL_PATH`, `MODEL_SEG_PATH`, `MODEL_DEVICE`, `FLOOD_ON`, `FLOOD_OFF`, `WINDOW_S`, `MIN_HOLD_S`, `CROP_BLACK_BORDER`, `SEGMENT_S`, `INFER_FPS`, `WATER_CLASSES`, `WATER_CONF`, `DRAW_WIDTH`).
-Mặc định: 5 khung/giây, p trung bình trượt 2 s, bật khi p ≥ 0,9, tắt khi p < 0,4, giữ tối thiểu 10 s, cắt viền đen bật, đoạn 2 s.
+Thứ tự ưu tiên: mặc định < luật nhúng trong file model đang dùng < `model.yaml` < biến môi trường (`MODEL_PATH`, `MODEL_CPU_PATH`, `MODEL_SEG_PATH`, `MODEL_DEVICE`, `FLOOD_ON`, `FLOOD_OFF`, `WINDOW_S`, `MIN_HOLD_S`, `CROP_BLACK_BORDER`, `SEGMENT_S`, `INFER_FPS`, `WATER_CLASSES`, `WATER_CONF`, `DRAW_WIDTH`).
+Mặc định: 5 khung/giây, p trung bình trượt (L-14: 1 s, B-32: 2 s), bật khi p ≥ 0,9, tắt khi p < 0,3, giữ tối thiểu 10 s, cắt viền đen bật, đoạn 2 s.
 
 ## Phân tích video
 OpenCV đọc video; không đọc được thì đổi sang H.264 bằng ffmpeg của `imageio-ffmpeg` rồi đọc lại. Các đoạn ngập liền nhau gộp thành 1 sự cố (bắt đầu/kết thúc trong video, độ tin cậy = p làm mượt lớn nhất trong đoạn).

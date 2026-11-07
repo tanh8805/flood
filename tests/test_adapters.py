@@ -234,14 +234,14 @@ def test_composite_draws_only_when_gate_allows():
 # ---- cấu hình ----
 def test_defaults_are_the_best_pt_rule(tmp_path):
     c = config.load_model_config(tmp_path)
-    assert (c.window_s, c.infer_fps, c.flood_on, c.flood_off, c.segment_s) == (2.0, 5.0, 0.9, 0.4, 2.0)
+    assert (c.window_s, c.infer_fps, c.flood_on, c.flood_off, c.segment_s) == (1.0, 5.0, 0.9, 0.3, 2.0)
     assert (c.water_conf, c.draw_width, c.path, c.seg_path, c.device) == (0.4, 960, "best.pt", "seg.pt", "auto")
 
 
 def test_config_yaml_and_env(tmp_path, monkeypatch):
     (tmp_path / "model.yaml").write_text("flood_on: 0.85\nwindow_s: 3\ndevice: cpu\n")
     c = config.load_model_config(tmp_path)
-    assert (c.flood_on, c.flood_off, c.window_s, c.device) == (0.85, 0.4, 3.0, "cpu")
+    assert (c.flood_on, c.flood_off, c.window_s, c.device) == (0.85, 0.3, 3.0, "cpu")
     monkeypatch.setenv("FLOOD_OFF", "0.5")
     monkeypatch.setenv("MODEL_DEVICE", "auto")
     c = config.load_model_config(tmp_path)
@@ -402,3 +402,46 @@ def test_best_adapter_upcasts_fp16_weights_on_cpu(tmp_path):
     a = BestAdapter(tmp_path / "best.pt", device="cpu")
     assert next(a.module.parameters()).dtype == torch.float32
     assert a.predict(np.full((8, 8, 3), 51, np.uint8))["p_ngap"] == pytest.approx(0.2, abs=1e-3)
+
+
+# ---- v7n: best.pt (GPU) / best_cpu.pt (CPU), luật nhúng trong file model ----
+def _save_with_rule(path, rule):
+    import json
+    torch.jit.script(_Mean()).save(str(path), _extra_files={"config.json": json.dumps({"rule": rule})})
+
+
+def test_resolve_decider_path_gpu_vs_cpu(tmp_path, monkeypatch):
+    from app import config as C
+    (tmp_path / "best.pt").write_bytes(b"g"); (tmp_path / "best_cpu.pt").write_bytes(b"c")
+    cfg = C.ModelConfig()
+    monkeypatch.setattr(C, "cuda_available", lambda: True)
+    assert C.resolve_decider_path(cfg, tmp_path).name == "best.pt"                       # auto + có GPU
+    monkeypatch.setattr(C, "cuda_available", lambda: False)
+    assert C.resolve_decider_path(cfg, tmp_path).name == "best_cpu.pt"                   # auto, không GPU
+    assert C.resolve_decider_path(C.ModelConfig(device="cpu"), tmp_path).name == "best_cpu.pt"
+    assert C.resolve_decider_path(C.ModelConfig(device="cuda"), tmp_path).name == "best.pt"
+    (tmp_path / "best_cpu.pt").unlink()
+    assert C.resolve_decider_path(cfg, tmp_path).name == "best.pt"                       # không có best_cpu.pt thì dùng best.pt
+
+
+def test_rule_comes_from_the_model_in_use_and_yaml_env_override(tmp_path, monkeypatch):
+    from app import config as C
+    _save_with_rule(tmp_path / "best.pt", {"window_s": 1.0, "on": 0.9, "off": 0.3, "min_hold_s": 10.0, "infer_fps": 5, "segment_s": 2.0})
+    _save_with_rule(tmp_path / "best_cpu.pt", {"window_s": 2.0, "on": 0.85, "off": 0.35, "min_hold_s": 12.0, "infer_fps": 5, "segment_s": 2.0})
+    monkeypatch.setattr(C, "cuda_available", lambda: True)
+    g = C.load_model_config(tmp_path)
+    assert (g.window_s, g.flood_on, g.flood_off, g.min_hold_s) == (1.0, 0.9, 0.3, 10.0)
+    monkeypatch.setattr(C, "cuda_available", lambda: False)
+    c = C.load_model_config(tmp_path)
+    assert (c.window_s, c.flood_on, c.flood_off, c.min_hold_s) == (2.0, 0.85, 0.35, 12.0)       # CPU dùng luật của B-32
+    (tmp_path / "model.yaml").write_text("flood_off: 0.5\n")
+    assert C.load_model_config(tmp_path).flood_off == 0.5 and C.load_model_config(tmp_path).window_s == 2.0   # yaml thắng luật nhúng
+    monkeypatch.setenv("WINDOW_S", "4")
+    assert C.load_model_config(tmp_path).window_s == 4.0                                                      # env thắng yaml
+    assert C.embedded_rule(tmp_path / "nope.pt") == {}
+
+
+def test_embedded_rule_ignores_non_torchscript_file(tmp_path):
+    from app import config as C
+    (tmp_path / "best.pt").write_bytes(b"x")
+    assert C.embedded_rule(tmp_path / "best.pt") == {}
